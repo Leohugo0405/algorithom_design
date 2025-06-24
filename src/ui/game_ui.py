@@ -281,6 +281,17 @@ class GameUI:
         else:
             self.add_message("路径比较失败")
     
+    def _handle_lock_encounter(self, interaction: Dict):
+        """
+        处理Lock遭遇事件
+        
+        Args:
+            interaction: 交互信息
+        """
+        self.add_message("进入解密界面...")
+        
+            
+
     def _handle_boss_encounter(self, interaction: Dict):
         """
         处理Boss遭遇事件
