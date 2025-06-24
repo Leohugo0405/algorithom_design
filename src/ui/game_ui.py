@@ -10,6 +10,7 @@ import sys
 from typing import Dict, List, Tuple, Optional
 from src.config import Config
 from src.game_engine import GameEngine
+from src.ui.battle_ui import BattleUI
 
 class GameUI:
     """
@@ -198,6 +199,10 @@ class GameUI:
                     interaction = result.get('interaction', {})
                     if interaction.get('message'):
                         self.add_message(interaction['message'])
+                    
+                    # 检查是否遇到Boss
+                    if interaction.get('type') == 'boss':
+                        self._handle_boss_encounter(interaction)
                 else:
                     self.add_message(result['message'])
     
@@ -221,12 +226,36 @@ class GameUI:
             if result.get('message'):
                 self.add_message(result['message'])
             
+            # 检查是否有活跃的战斗
+            game_state = self.game_engine.get_game_state()
+            if game_state.get('active_battle'):
+                self.add_message("AI遇到Boss，自动进入战斗...")
+                self._handle_ai_boss_battle(game_state['active_battle'])
+            
             if result.get('game_completed'):
                 self.auto_play = False
                 self.add_message("游戏完成！自动游戏停止")
         else:
             self.add_message(f"自动游戏错误: {result['message']}")
             self.auto_play = False
+    
+    def _handle_ai_boss_battle(self, battle_data: Dict):
+        """
+        处理AI的Boss战斗
+        
+        Args:
+            battle_data: 战斗数据
+        """
+        # AI直接使用游戏引擎进行战斗，不显示战斗界面
+        battle_result = self.game_engine.fight_boss('optimal')
+        
+        # 处理战斗结果
+        if battle_result['success']:
+            self.add_message(f"AI Boss战斗胜利！{battle_result['message']}")
+            if 'reward' in battle_result:
+                self.add_message(f"AI获得奖励: {battle_result['reward']}资源")
+        else:
+            self.add_message(f"AI Boss战斗失败: {battle_result['message']}")
     
     def _calculate_optimal_path(self):
         """
@@ -264,6 +293,37 @@ class GameUI:
             self.add_message(f"价值提升: {improvement['value_diff']}")
         else:
             self.add_message("路径比较失败")
+    
+    def _handle_boss_encounter(self, interaction: Dict):
+        """
+        处理Boss遭遇事件
+        
+        Args:
+            interaction: 交互信息
+        """
+        self.add_message("进入Boss战斗界面...")
+        
+        # 创建Boss数据
+        boss_data = {
+            'boss_hp': interaction.get('boss_hp', Config.BOSS_HP),
+            'position': self.game_engine.player_pos
+        }
+        
+        # 创建并运行战斗UI
+        battle_ui = BattleUI(self.game_engine, boss_data)
+        battle_result = battle_ui.run()
+        
+        # 处理战斗结果
+        if battle_result['success']:
+            self.add_message(f"Boss战斗胜利！{battle_result['message']}")
+            if 'reward' in battle_result:
+                self.add_message(f"获得奖励: {battle_result['reward']}资源")
+        else:
+            self.add_message(f"Boss战斗失败: {battle_result['message']}")
+        
+        # 恢复主游戏窗口
+        pygame.display.set_mode((Config.WINDOW_WIDTH, Config.WINDOW_HEIGHT))
+        pygame.display.set_caption(Config.WINDOW_TITLE)
     
     def _render(self):
         """
