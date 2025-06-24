@@ -194,6 +194,7 @@ class GameUI:
                 direction = 'right'
             
             if direction:
+                prev_pos = self.game_engine.player_pos
                 result = self.game_engine.move_player(direction)
                 if result['success']:
                     interaction = result.get('interaction', {})
@@ -202,6 +203,16 @@ class GameUI:
                     # 删除已拾取金币格子
                     pos = self.game_engine.player_pos
                     i, j = pos
+                    if self.game_engine.maze[i][j] == 'L':
+                        self.add_message("触发解谜挑战...")
+                        puzzle_result = self.game_engine.solve_puzzle()  # 调用解谜逻辑
+                        if puzzle_result:
+                            self.add_message("解谜成功！")
+                            self.game_engine.maze[i][j] = Config.PATH  # 转为空地
+                        else:
+                            self.add_message("解谜失败，返回原位置。")
+                            self.game_engine.player_pos = prev_pos  # 回退
+                            return  # 中断处理
                     if self.game_engine.maze[i][j] == Config.GOLD:
                         self.game_engine.maze[i][j] = Config.PATH  # 将金币格子改为空白路径
 
