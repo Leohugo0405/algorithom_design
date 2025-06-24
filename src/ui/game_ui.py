@@ -286,16 +286,24 @@ class GameUI:
         else:
             self.add_message("路径比较失败")
     
-    def _handle_lock_encounter(self, interaction: Dict):
-        """
-        处理Lock遭遇事件
+    # def _handle_lock_encounter(self, interaction: Dict):
+    #     """
+    #     处理Lock遭遇事件
         
-        Args:
-            interaction: 交互信息
-        """
-        self.add_message("进入解密界面...")
-        
-            
+    #     Args:
+    #         interaction: 交互信息
+    #     """
+    #     self.add_message("进入解谜界面...")
+
+    #     # 创建谜题数据
+    #     lock_data = {
+    #         'puzzle':
+    #         'position': self.game_engine.player_pos
+    #     }
+
+    #     # 创建并运行解密界面
+    #     lock_ui = LockUI(self.game_engine, lock_data)
+    #     battle_result=lock_ui.run()
 
     def _handle_boss_encounter(self, interaction: Dict):
         """
