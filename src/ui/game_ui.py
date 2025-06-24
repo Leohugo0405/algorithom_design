@@ -38,7 +38,8 @@ class GameUI:
         self.auto_play = False
         self.auto_play_speed = 500  # 毫秒
         self.last_auto_step = 0
-        
+        self.game_completed = False  # 游戏是否已结束
+
         # 显示面板
         self.show_statistics = True
         self.show_controls = True
@@ -145,6 +146,8 @@ class GameUI:
                 self.add_message("游戏重新开始！")
                 self.optimal_path = []
                 self.greedy_path = []
+                self.game_completed = False  # 重置游戏结束标志
+
             
         elif key == pygame.K_a:
             # 切换自动游戏
@@ -181,7 +184,8 @@ class GameUI:
             # 比较路径策略
             self._compare_path_strategies()
         
-        elif not self.auto_play and not self.paused:
+        elif not self.auto_play and not self.paused and not self.game_completed:
+
             # 手动移动控制
             direction = None
             if key == pygame.K_UP or key == pygame.K_w:
@@ -213,6 +217,10 @@ class GameUI:
                             self.add_message("解谜失败，返回原位置。")
                             self.game_engine.player_pos = prev_pos  # 回退
                             return  # 中断处理
+                    if self.game_engine.maze[i][j] == 'E':
+                        self.add_message("🎉 恭喜！你已到达出口，游戏结束！")
+                        self.game_completed = True  # ✅ 标记游戏结束
+                        return  # 停止后续处理
                     if self.game_engine.maze[i][j] == Config.GOLD:
                         self.game_engine.maze[i][j] = Config.PATH  # 将金币格子改为空白路径
 
