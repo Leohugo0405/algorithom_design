@@ -70,11 +70,11 @@ class GameUI:
         
         # 初始化字体
         try:
-            self.font = pygame.font.Font('font/msyh.ttc', 24)
-            self.small_font = pygame.font.Font('font/msyh.ttc', 18)
+            self.font = pygame.font.Font('font/msyh.ttc', 18)
+            self.small_font = pygame.font.Font('font/msyh.ttc', 12)
         except:
-            self.font = pygame.font.SysFont('Arial', 24)
-            self.small_font = pygame.font.SysFont('Arial', 18)
+            self.font = pygame.font.SysFont('Arial', 18)
+            self.small_font = pygame.font.SysFont('Arial', 12)
     
     def run(self):
         """
@@ -199,7 +199,12 @@ class GameUI:
                     interaction = result.get('interaction', {})
                     if interaction.get('message'):
                         self.add_message(interaction['message'])
-                    
+                    # 删除已拾取金币格子
+                    pos = self.game_engine.player_pos
+                    i, j = pos
+                    if self.game_engine.maze[i][j] == Config.GOLD:
+                        self.game_engine.maze[i][j] = Config.PATH  # 将金币格子改为空白路径
+
                     # 检查是否遇到Boss
                     if interaction.get('type') == 'boss':
                         self._handle_boss_encounter(interaction)

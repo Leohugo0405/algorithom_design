@@ -238,7 +238,7 @@ class BossStrategy:
         skill = self.skills[skill_name]
         
         # 计算伤害（考虑增益效果）
-        damage = skill['damage']
+        damage = skill.get('damage', 0)
         if len(state.skill_sequence) > 0 and state.skill_sequence[-1] == 'buff':
             damage += skill.get('damage_boost', 0)
         
@@ -293,14 +293,14 @@ class BossStrategy:
 
             # 使用技能
             player_resources -= skill['cost']
-            boss_hp -= skill['damage']
+            boss_hp -= skill.get('damage', 0)
             if skill_name == 'special_attack':
                 special_cooldown = skill['cooldown']
             
             log_entry = {
                 'round': i + 1,
                 'skill': skill['name'],
-                'damage': skill['damage'],
+                'damage': skill.get('damage', 0),
                 'boss_hp': boss_hp,
                 'player_resources': player_resources,
                 'cooldown': special_cooldown

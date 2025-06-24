@@ -205,10 +205,6 @@ class GreedyStrategy:
         current_pos = start_pos
         total_path = [current_pos]
         total_value = 0
-        collected_resources = set()
-        
-        # 创建迷宫副本，用于标记已收集的资源
-        maze_copy = [row[:] for row in self.maze]
         
         while True:
             # 在当前视野内寻找最佳资源
@@ -218,12 +214,6 @@ class GreedyStrategy:
                 break  # 没有可见资源
             
             target_pos = best_resource['position']
-            
-            # 检查资源是否已被收集
-            if target_pos in collected_resources:
-                # 标记为已收集，继续寻找
-                maze_copy[target_pos[0]][target_pos[1]] = Config.PATH
-                continue
             
             # 找到到达资源的路径
             path_to_resource = self.find_path_to_resource(current_pos, target_pos)
@@ -237,10 +227,10 @@ class GreedyStrategy:
             # 更新当前位置和总价值
             current_pos = target_pos
             total_value += best_resource['value']
-            collected_resources.add(target_pos)
             
-            # 标记资源为已收集
-            maze_copy[target_pos[0]][target_pos[1]] = Config.PATH
+            # 将收集过的金币格子设为路径（删除资源）
+            if self.maze[current_pos[0]][current_pos[1]] == Config.GOLD:
+                self.maze[current_pos[0]][current_pos[1]] = Config.PATH
         
         return total_path, total_value
     
@@ -257,8 +247,6 @@ class GreedyStrategy:
         current_pos = start_pos
         steps = []
         total_value = 0
-        collected_resources = set()
-        maze_copy = [row[:] for row in self.maze]
         
         step_count = 0
         
@@ -268,13 +256,7 @@ class GreedyStrategy:
             # 获取当前视野内的资源
             visible_resources = self.get_resources_in_vision(current_pos)
             
-            # 过滤已收集的资源
-            available_resources = [
-                r for r in visible_resources 
-                if r['position'] not in collected_resources
-            ]
-            
-            if not available_resources:
+            if not visible_resources:
                 steps.append({
                     'step': step_count,
                     'position': current_pos,
@@ -285,7 +267,7 @@ class GreedyStrategy:
                 break
             
             # 选择最佳资源
-            best_resource = max(available_resources, key=lambda x: x['cost_benefit'])
+            best_resource = max(visible_resources, key=lambda x: x['cost_benefit'])
             
             # 记录这一步的信息
             steps.append({
@@ -295,7 +277,7 @@ class GreedyStrategy:
                 'target': best_resource['position'],
                 'target_type': best_resource['type'],
                 'target_value': best_resource['value'],
-                'visible_resources': available_resources,
+                'visible_resources': visible_resources,
                 'total_value': total_value
             })
             
@@ -314,8 +296,10 @@ class GreedyStrategy:
             # 更新位置和价值
             current_pos = best_resource['position']
             total_value += best_resource['value']
-            collected_resources.add(current_pos)
-            maze_copy[current_pos[0]][current_pos[1]] = Config.PATH
+            
+            # 将收集过的金币格子设为路径（删除资源）
+            if self.maze[current_pos[0]][current_pos[1]] == Config.GOLD:
+                self.maze[current_pos[0]][current_pos[1]] = Config.PATH
         
         return steps
     
@@ -329,8 +313,13 @@ class GreedyStrategy:
         Returns:
             Dict: 策略效率分析
         """
+        # 创建迷宫副本以避免修改原始迷宫
+        original_maze = [row[:] for row in self.maze]
         path, total_value = self.greedy_resource_collection(start_pos)
         steps = self.simulate_step_by_step(start_pos)
+        
+        # 恢复原始迷宫
+        self.maze = [row[:] for row in original_maze]
         
         # 统计所有可收集的资源
         all_resources = 0
