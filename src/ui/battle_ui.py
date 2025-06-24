@@ -42,6 +42,8 @@ class BattleUI:
         self.boss_area = pygame.Rect(500, 200, 200, 200)
         self.skill_buttons = {}
         self.control_area = pygame.Rect(50, 520, 700, 200)
+        self.show_optimal_btn = True
+        self.optimal_btn_rect = pygame.Rect(600, 480, 180, 40)
 
         self._initialize_pygame()
 
@@ -85,8 +87,11 @@ class BattleUI:
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 self.running = False
 
-            elif event.type == pygame.MOUSEBUTTONDOWN and self.player_turn:
-                self._handle_mouse_click(event.pos)
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if self.show_optimal_btn and self.optimal_btn_rect.collidepoint(event.pos):
+                    self._show_optimal_strategy()
+                elif self.player_turn:
+                    self._handle_mouse_click(event.pos)
 
             elif event.type == pygame.USEREVENT: # Boss行动定时器
                 self._handle_boss_turn()
@@ -278,6 +283,13 @@ class BattleUI:
 
             x_offset += 170
 
+        # 最优策略按钮
+        if self.show_optimal_btn:
+            pygame.draw.rect(self.screen, Config.COLORS['GREEN'], self.optimal_btn_rect, border_radius=5)
+            pygame.draw.rect(self.screen, Config.COLORS['WHITE'], self.optimal_btn_rect, 2, border_radius=5)
+            btn_text = self.small_font.render("最优策略演示", True, Config.COLORS['WHITE'])
+            self.screen.blit(btn_text, (self.optimal_btn_rect.centerx - btn_text.get_width() // 2, self.optimal_btn_rect.centery - btn_text.get_height() // 2))
+
     def _render_log_panel(self):
         """
         渲染战斗日志
@@ -321,4 +333,20 @@ class BattleUI:
         """
         self.battle_log.append(message)
         if len(self.battle_log) > 20:
-            self.battle_log.pop(0) 
+            self.battle_log.pop(0)
+
+    def _show_optimal_strategy(self):
+        from src.algorithms.boss_strategy import BossStrategy
+        # 获取当前boss和玩家资源
+        boss_hp = self.game_engine.get_battle_state()['boss_hp']
+        player_resources = self.game_engine.get_battle_state()['player_resources']
+        boss_strategy = BossStrategy(boss_hp=boss_hp, player_resources=player_resources)
+        optimal_sequence, rounds_needed, stats = boss_strategy.find_optimal_strategy()
+        if optimal_sequence:
+            print("\n【分支限界法BOSS最优策略】")
+            print(f"最小回合数: {rounds_needed}")
+            print(f"技能序列: {optimal_sequence}")
+            self.add_log(f"最优策略已输出到终端！")
+        else:
+            print("未找到可行的最优策略！")
+            self.add_log("未找到可行的最优策略！") 

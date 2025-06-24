@@ -70,11 +70,11 @@ class GameUI:
         
         # 初始化字体
         try:
-            self.font = pygame.font.Font('font/msyh.ttc', 24)
-            self.small_font = pygame.font.Font('font/msyh.ttc', 18)
+            self.font = pygame.font.Font('font/msyh.ttc', 18)
+            self.small_font = pygame.font.Font('font/msyh.ttc', 12)
         except:
-            self.font = pygame.font.SysFont('Arial', 24)
-            self.small_font = pygame.font.SysFont('Arial', 18)
+            self.font = pygame.font.SysFont('Arial', 18)
+            self.small_font = pygame.font.SysFont('Arial', 12)
     
     def run(self):
         """
