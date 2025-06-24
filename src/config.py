@@ -70,9 +70,29 @@ class Config:
     
     # BOSS战斗参数
     BOSS_HP = 50  # BOSS血量
-    NORMAL_ATTACK_DAMAGE = 5  # 普通攻击伤害
-    SPECIAL_ATTACK_DAMAGE = 10  # 大招伤害
-    SPECIAL_ATTACK_COOLDOWN = 2  # 大招冷却回合数
+    BOSS_ATTACK_DAMAGE = 8  # BOSS攻击伤害
+
+    # 玩家技能参数
+    SKILLS = {
+        'normal_attack': {
+            'name': '普通攻击',
+            'damage': 5,
+            'cost': 0,
+            'cooldown': 0
+        },
+        'special_attack': {
+            'name': '强力一击',
+            'damage': 12,
+            'cost': 10,
+            'cooldown': 2  # 冷却2个回合
+        },
+        'heal': {
+            'name': '治疗',
+            'heal_amount': 25,
+            'cost': 15,
+            'cooldown': 3
+        }
+    }
     
     # 密码锁参数
     LOCK_DIGITS = 3  # 密码位数

@@ -28,7 +28,7 @@ class BattleState:
     def get_priority(self) -> float:
         """计算状态优先级（f(n) = g(n) + h(n)）"""
         g_n = self.rounds_used  # 已用回合数
-        h_n = max(0, self.boss_hp / Config.NORMAL_ATTACK_DAMAGE)  # 预估剩余回合数
+        h_n = max(0, self.boss_hp / Config.SKILLS['normal_attack']['damage'])  # 预估剩余回合数
         return g_n + h_n
     
     def is_victory(self) -> bool:
@@ -55,35 +55,8 @@ class BossStrategy:
         self.initial_boss_hp = boss_hp
         self.initial_player_resources = player_resources
         
-        # 技能定义
-        self.skills = {
-            'normal_attack': {
-                'name': '普通攻击',
-                'damage': Config.NORMAL_ATTACK_DAMAGE,
-                'cost': 0,
-                'cooldown': 0
-            },
-            'special_attack': {
-                'name': '大招',
-                'damage': Config.SPECIAL_ATTACK_DAMAGE,
-                'cost': 10,  # 消耗资源
-                'cooldown': Config.SPECIAL_ATTACK_COOLDOWN
-            },
-            'heal': {
-                'name': '治疗',
-                'damage': 0,
-                'cost': 15,
-                'cooldown': 0,
-                'heal_amount': 20
-            },
-            'buff': {
-                'name': '增益',
-                'damage': 0,
-                'cost': 5,
-                'cooldown': 1,
-                'damage_boost': 2  # 下次攻击伤害+2
-            }
-        }
+        # 技能定义现在直接从Config获取
+        self.skills = Config.SKILLS
         
         self.explored_states = set()
         self.best_solution = None
@@ -188,12 +161,13 @@ class BossStrategy:
             return True
         
         # 资源不足且无法仅用普通攻击获胜
+        normal_attack_damage = Config.SKILLS['normal_attack']['damage']
         if (state.player_resources <= 0 and 
-            state.boss_hp > Config.NORMAL_ATTACK_DAMAGE * (max_rounds - state.rounds_used)):
+            state.boss_hp > normal_attack_damage * (max_rounds - state.rounds_used)):
             return True
         
         # 乐观估计：即使每回合都用最高伤害也无法获胜
-        max_damage_per_round = max(Config.NORMAL_ATTACK_DAMAGE, Config.SPECIAL_ATTACK_DAMAGE)
+        max_damage_per_round = max(s['damage'] for s in Config.SKILLS.values() if 'damage' in s)
         remaining_rounds = max_rounds - state.rounds_used
         if state.boss_hp > max_damage_per_round * remaining_rounds:
             return True
@@ -299,43 +273,45 @@ class BossStrategy:
         Returns:
             Dict: 战斗结果
         """
-        state = BattleState(
-            boss_hp=self.initial_boss_hp,
-            player_resources=self.initial_player_resources,
-            rounds_used=0,
-            special_cooldown=0,
-            skill_sequence=[]
-        )
-        
+        boss_hp = self.initial_boss_hp
+        player_resources = self.initial_player_resources
+        special_cooldown = 0
         battle_log = []
         
-        for round_num, skill_name in enumerate(skill_sequence, 1):
-            if not self._can_use_skill(state, skill_name):
-                return {
-                    'success': False,
-                    'reason': f'无法在第{round_num}回合使用{skill_name}',
-                    'battle_log': battle_log
-                }
+        for i, skill_name in enumerate(skill_sequence):
+            skill = self.skills[skill_name]
             
-            old_boss_hp = state.boss_hp
-            state = self._apply_skill(state, skill_name)
+            # 更新冷却
+            if special_cooldown > 0:
+                special_cooldown -= 1
+
+            # 检查是否可用
+            if player_resources < skill['cost']:
+                return {'success': False, 'reason': '资源不足', 'battle_log': battle_log}
+            if skill_name == 'special_attack' and special_cooldown > 0:
+                return {'success': False, 'reason': '技能冷却中', 'battle_log': battle_log}
+
+            # 使用技能
+            player_resources -= skill['cost']
+            boss_hp -= skill['damage']
+            if skill_name == 'special_attack':
+                special_cooldown = skill['cooldown']
             
-            damage_dealt = old_boss_hp - state.boss_hp
+            log_entry = {
+                'round': i + 1,
+                'skill': skill['name'],
+                'damage': skill['damage'],
+                'boss_hp': boss_hp,
+                'player_resources': player_resources,
+                'cooldown': special_cooldown
+            }
+            battle_log.append(log_entry)
             
-            battle_log.append({
-                'round': round_num,
-                'skill': self.skills[skill_name]['name'],
-                'damage': damage_dealt,
-                'boss_hp': state.boss_hp,
-                'player_resources': state.player_resources,
-                'cooldown': state.special_cooldown
-            })
-            
-            if state.is_victory():
+            if boss_hp <= 0:
                 return {
                     'success': True,
-                    'rounds_used': round_num,
-                    'final_resources': state.player_resources,
+                    'rounds_used': i + 1,
+                    'final_resources': player_resources,
                     'battle_log': battle_log
                 }
         
@@ -343,7 +319,7 @@ class BossStrategy:
             'success': False,
             'reason': 'BOSS未被击败',
             'rounds_used': len(skill_sequence),
-            'final_boss_hp': state.boss_hp,
+            'final_boss_hp': boss_hp,
             'battle_log': battle_log
         }
     

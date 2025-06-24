@@ -19,10 +19,6 @@ class BattleUI:
     def __init__(self, game_engine: GameEngine, boss_data: Dict):
         """
         初始化战斗UI
-        
-        Args:
-            game_engine: 游戏引擎实例
-            boss_data: Boss数据
         """
         self.game_engine = game_engine
         self.boss_data = boss_data
@@ -35,376 +31,294 @@ class BattleUI:
         # 战斗状态
         self.running = True
         self.battle_result = None
-        self.selected_strategy = 'optimal'  # 'optimal' 或 'random'
+        self.player_turn = True
         
         # 战斗动画
-        self.animation_frame = 0
-        self.animation_speed = 5
-        self.battle_log = []
-        self.show_battle_log = False
+        self.animations = [] # 动画队列
+        self.battle_log = ["战斗开始！"]
         
-        # UI元素位置
-        self.battle_area = pygame.Rect(50, 100, 700, 400)
-        self.player_area = pygame.Rect(100, 300, 200, 150)
-        self.boss_area = pygame.Rect(500, 150, 200, 150)
+        # UI元素
+        self.player_area = pygame.Rect(100, 250, 200, 200)
+        self.boss_area = pygame.Rect(500, 200, 200, 200)
+        self.skill_buttons = {}
         self.control_area = pygame.Rect(50, 520, 700, 200)
-        
-        # 初始化pygame
+
         self._initialize_pygame()
-    
+
     def _initialize_pygame(self):
         """
         初始化pygame组件
         """
-        # 创建战斗窗口
         self.screen = pygame.display.set_mode((800, 750))
         pygame.display.set_caption("Boss战斗 - " + Config.WINDOW_TITLE)
-        
-        # 创建时钟
         self.clock = pygame.time.Clock()
-        
-        # 初始化字体
         try:
             self.font = pygame.font.Font('font/msyh.ttc', 24)
-            self.small_font = pygame.font.Font('font/msyh.ttc', 18)
+            self.small_font = pygame.font.Font('font/msyh.ttc', 16)
             self.title_font = pygame.font.Font('font/msyh.ttc', 32)
         except:
             self.font = pygame.font.SysFont('Arial', 24)
-            self.small_font = pygame.font.SysFont('Arial', 18)
+            self.small_font = pygame.font.SysFont('Arial', 16)
             self.title_font = pygame.font.SysFont('Arial', 32)
-    
+
     def run(self) -> Dict:
         """
-        运行战斗界面
-        
-        Returns:
-            Dict: 战斗结果
+        运行战斗界面主循环
         """
-        # 主战斗循环
         while self.running:
-            current_time = pygame.time.get_ticks()
-            
-            # 处理事件
             self._handle_events()
-            
-            # 更新动画
-            if self.animation_frame > 0:
-                self.animation_frame -= 1
-            
-            # 渲染战斗界面
+            self._update()
             self._render()
-            
-            # 控制帧率
             self.clock.tick(Config.FPS)
         
         return self.battle_result or {'success': False, 'message': '战斗被取消'}
-    
+
     def _handle_events(self):
         """
-        处理pygame事件
+        处理事件
         """
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
                 self.battle_result = {'success': False, 'message': '战斗被取消'}
             
-            elif event.type == pygame.KEYDOWN:
-                self._handle_keydown(event.key)
-            
-            elif event.type == pygame.MOUSEBUTTONDOWN:
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                self.running = False
+
+            elif event.type == pygame.MOUSEBUTTONDOWN and self.player_turn:
                 self._handle_mouse_click(event.pos)
-    
-    def _handle_keydown(self, key):
-        """
-        处理键盘按下事件
-        
-        Args:
-            key: 按下的键
-        """
-        if key == pygame.K_ESCAPE:
-            self.running = False
-            self.battle_result = {'success': False, 'message': '战斗被取消'}
-        
-        elif key == pygame.K_1:
-            # 选择最优策略
-            self.selected_strategy = 'optimal'
-        
-        elif key == pygame.K_2:
-            # 选择随机策略
-            self.selected_strategy = 'random'
-        
-        elif key == pygame.K_SPACE:
-            # 开始战斗
-            self._start_battle()
-        
-        elif key == pygame.K_l:
-            # 切换战斗日志显示
-            self.show_battle_log = not self.show_battle_log
-    
+
+            elif event.type == pygame.USEREVENT: # Boss行动定时器
+                self._handle_boss_turn()
+                pygame.time.set_timer(pygame.USEREVENT, 0) # 关闭定时器
+
     def _handle_mouse_click(self, pos: Tuple[int, int]):
         """
-        处理鼠标点击事件
-        
-        Args:
-            pos: 鼠标位置
+        处理鼠标点击技能按钮
         """
-        # 检查策略选择按钮
-        optimal_btn = pygame.Rect(100, 580, 150, 40)
-        random_btn = pygame.Rect(270, 580, 150, 40)
-        battle_btn = pygame.Rect(440, 580, 150, 40)
-        
-        if optimal_btn.collidepoint(pos):
-            self.selected_strategy = 'optimal'
-        elif random_btn.collidepoint(pos):
-            self.selected_strategy = 'random'
-        elif battle_btn.collidepoint(pos):
-            self._start_battle()
+        if not self.player_turn:
+            return
+
+        for skill_name, rect in self.skill_buttons.items():
+            if rect.collidepoint(pos):
+                battle_state = self.game_engine.get_battle_state()
+                if battle_state['available_skills'].get(skill_name):
+                    self.player_turn = False
+                    self._execute_turn(skill_name)
+                    break
     
-    def _start_battle(self):
+    def _execute_turn(self, skill_name: str):
         """
-        开始战斗
-        
-        Returns:
-            Dict: 战斗结果
+        执行一个战斗回合
         """
-        # 执行战斗
-        result = self.game_engine.fight_boss(self.selected_strategy)
+        result = self.game_engine.execute_battle_turn(skill_name)
         
-        if result['success']:
-            # 战斗成功
-            self.battle_log = result.get('battle_log', [])
-            self.battle_result = result
-            self.add_battle_message(f"战斗胜利！用时{result['rounds_used']}回合")
-            self.add_battle_message(f"获得{result['reward']}资源奖励")
+        if not result['success']:
+            self.add_log(result['message'])
+            self.player_turn = True
+            return
+
+        # 玩家动画和日志
+        player_action = result['player_action']
+        skill_config = Config.SKILLS[player_action['skill']]
+        self.add_log(f"你使用了 '{skill_config['name']}'!")
+        if player_action['damage'] > 0:
+            self.add_animation('player_attack', self.boss_area.center, f"-{player_action['damage']}")
+            self.add_log(f"对Boss造成了 {player_action['damage']}点伤害。")
+        if player_action['heal'] > 0:
+            self.add_animation('heal', self.player_area.center, f"+{player_action['heal']}")
+            self.add_log(f"你恢复了 {player_action['heal']}点生命值。")
+
+        # 存储回合结果，以便Boss回合使用
+        self.last_turn_result = result
+
+        # 检查战斗状态，如果玩家获胜则直接结束
+        if result['status'] == 'victory':
+            self._check_battle_status(result['status'], result)
         else:
-            # 战斗失败
+            # 延迟1秒后Boss行动
+            pygame.time.set_timer(pygame.USEREVENT, 1000)
+
+    def _handle_boss_turn(self):
+        """
+        处理Boss的回合，播放动画和日志
+        """
+        result = self.last_turn_result
+        if not result or result['status'] != 'ongoing':
+            return
+            
+        boss_action = result['boss_action']
+        self.add_log("Boss攻击了你！")
+        if boss_action['damage'] > 0:
+            self.add_animation('boss_attack', self.player_area.center, f"-{boss_action['damage']}")
+            self.add_log(f"你受到了 {boss_action['damage']}点伤害。")
+
+        self._check_battle_status(result['status'], result)
+
+    def _update(self):
+        """
+        更新动画状态
+        """
+        for anim in self.animations[:]:
+            anim['timer'] -= 1
+            if anim['timer'] <= 0:
+                self.animations.remove(anim)
+
+    def _check_battle_status(self, status: str, result: Dict):
+        """
+        检查战斗是否结束
+        """
+        if status == 'victory':
+            self.add_log(f"战斗胜利！获得{result['reward']}资源奖励。")
             self.battle_result = result
-            self.add_battle_message(f"战斗失败: {result['message']}")
-        
-        # 如果是AI模式，直接返回结果
-        if hasattr(self, '_ai_mode') and self._ai_mode:
-            return result
-        
-        # 延迟关闭窗口，让玩家看到结果
-        pygame.time.wait(2000)
-        self.running = False
-        
-        return result
-    
+            pygame.time.wait(2000)
+            self.running = False
+        elif status == 'defeat':
+            self.add_log("战斗失败！")
+            self.battle_result = result
+            pygame.time.wait(2000)
+            self.running = False
+        else:
+            self.player_turn = True
+
     def _render(self):
         """
-        渲染战斗界面
+        渲染所有战斗界面元素
         """
-        # 清空屏幕
         self.screen.fill(Config.COLORS['BLACK'])
-        
-        # 渲染标题
-        self._render_title()
-        
-        # 渲染战斗区域
+        self._render_battle_info()
         self._render_battle_area()
-        
-        # 渲染控制面板
         self._render_control_panel()
-        
-        # 渲染战斗日志
-        if self.show_battle_log:
-            self._render_battle_log()
-        
-        # 更新显示
+        self._render_log_panel()
+        self._render_animations()
         pygame.display.flip()
-    
-    def _render_title(self):
+
+    def _render_battle_info(self):
         """
-        渲染标题
+        渲染战斗信息
         """
-        title_text = self.title_font.render("Boss战斗", True, Config.COLORS['WHITE'])
-        title_rect = title_text.get_rect(center=(400, 30))
-        self.screen.blit(title_text, title_rect)
+        battle_state = self.game_engine.get_battle_state()
+        if not battle_state: return
+
+        title_text = self.title_font.render("Boss 激战", True, Config.COLORS['WHITE'])
+        self.screen.blit(title_text, title_text.get_rect(center=(400, 30)))
         
-        # 显示Boss信息
-        boss_info = f"Boss血量: {self.boss_data['boss_hp']}"
-        boss_text = self.font.render(boss_info, True, Config.COLORS['RED'])
-        self.screen.blit(boss_text, (50, 60))
+        turn_text_str = "你的回合" if self.player_turn else "Boss回合"
+        turn_text = self.font.render(turn_text_str, True, Config.COLORS['YELLOW'])
+        self.screen.blit(turn_text, (650, 20))
         
-        # 显示玩家信息
-        game_state = self.game_engine.get_game_state()
-        player_info = f"玩家资源: {game_state['player_resources']}"
-        player_text = self.font.render(player_info, True, Config.COLORS['GREEN'])
-        self.screen.blit(player_text, (300, 60))
-    
     def _render_battle_area(self):
         """
-        渲染战斗区域
+        渲染战斗区域，包括玩家和Boss
         """
-        # 绘制战斗区域背景
-        pygame.draw.rect(self.screen, Config.COLORS['DARK_GREEN'], self.battle_area)
-        pygame.draw.rect(self.screen, Config.COLORS['WHITE'], self.battle_area, 3)
+        # ... (reuse existing rendering for player and boss icons)
+        self._render_character("⚔️", self.player_area)
+        self._render_character("👹", self.boss_area)
+
+        battle_state = self.game_engine.get_battle_state()
+        if not battle_state: return
         
-        # 渲染Boss
-        self._render_boss()
-        
-        # 渲染玩家
-        self._render_player()
-        
-        # 渲染战斗动画
-        if self.animation_frame > 0:
-            self._render_battle_animation()
+        self._render_hp_bar(battle_state['player_hp'], self.game_engine.active_battle['initial_player_hp'], self.player_area, Config.COLORS['GREEN'])
+        self._render_resource_bar(battle_state['player_resources'], self.player_area)
+        self._render_hp_bar(battle_state['boss_hp'], self.game_engine.active_battle['initial_boss_hp'], self.boss_area, Config.COLORS['RED'])
     
-    def _render_boss(self):
-        """
-        渲染Boss
-        """
-        # Boss图标
-        boss_icon = self.font.render("👹", True, Config.COLORS['RED'])
-        boss_rect = boss_icon.get_rect(center=self.boss_area.center)
-        self.screen.blit(boss_icon, boss_rect)
+    def _render_character(self, icon: str, area: pygame.Rect):
+        char_icon = self.font.render(icon, True, Config.COLORS['WHITE'])
+        self.screen.blit(char_icon, char_icon.get_rect(center=area.center))
+
+    def _render_hp_bar(self, current: int, total: int, area: pygame.Rect, color: Tuple):
+        if total == 0: return
+        ratio = current / total
+        bar_rect = pygame.Rect(area.left, area.bottom + 5, area.width, 20)
+        current_bar_rect = pygame.Rect(area.left, area.bottom + 5, int(area.width * ratio), 20)
         
-        # Boss血量条
-        boss_hp = self.boss_data['boss_hp']
-        max_hp = Config.BOSS_HP
-        hp_ratio = boss_hp / max_hp
+        pygame.draw.rect(self.screen, Config.COLORS['GRAY'], bar_rect)
+        pygame.draw.rect(self.screen, color, current_bar_rect)
         
-        hp_bar_rect = pygame.Rect(self.boss_area.x, self.boss_area.bottom + 10, 
-                                 self.boss_area.width, 20)
-        pygame.draw.rect(self.screen, Config.COLORS['GRAY'], hp_bar_rect)
-        
-        current_hp_rect = pygame.Rect(self.boss_area.x, self.boss_area.bottom + 10,
-                                     int(self.boss_area.width * hp_ratio), 20)
-        pygame.draw.rect(self.screen, Config.COLORS['RED'], current_hp_rect)
-        
-        # 血量文字
-        hp_text = self.small_font.render(f"{boss_hp}/{max_hp}", True, Config.COLORS['WHITE'])
-        hp_text_rect = hp_text.get_rect(center=hp_bar_rect.center)
-        self.screen.blit(hp_text, hp_text_rect)
-    
-    def _render_player(self):
-        """
-        渲染玩家
-        """
-        # 玩家图标
-        player_icon = self.font.render("⚔️", True, Config.COLORS['BLUE'])
-        player_rect = player_icon.get_rect(center=self.player_area.center)
-        self.screen.blit(player_icon, player_rect)
-        
-        # 玩家资源条
-        game_state = self.game_engine.get_game_state()
-        resources = game_state['player_resources']
-        max_resources = 100
-        
-        resource_bar_rect = pygame.Rect(self.player_area.x, self.player_area.bottom + 10,
-                                       self.player_area.width, 20)
-        pygame.draw.rect(self.screen, Config.COLORS['GRAY'], resource_bar_rect)
-        
-        current_resource_rect = pygame.Rect(self.player_area.x, self.player_area.bottom + 10,
-                                           int(self.player_area.width * (resources / max_resources)), 20)
-        pygame.draw.rect(self.screen, Config.COLORS['GOLD'], current_resource_rect)
-        
-        # 资源文字
-        resource_text = self.small_font.render(f"{resources}/{max_resources}", True, Config.COLORS['WHITE'])
-        resource_text_rect = resource_text.get_rect(center=resource_bar_rect.center)
-        self.screen.blit(resource_text, resource_text_rect)
-    
-    def _render_battle_animation(self):
-        """
-        渲染战斗动画
-        """
-        # 简单的攻击动画
-        if self.animation_frame > 0:
-            # 绘制攻击效果
-            attack_pos = (400, 250)
-            attack_color = Config.COLORS['YELLOW']
-            attack_size = 20 + (self.animation_frame * 2)
-            
-            pygame.draw.circle(self.screen, attack_color, attack_pos, attack_size)
-            pygame.draw.circle(self.screen, Config.COLORS['ORANGE'], attack_pos, attack_size - 5)
-    
+        hp_text = self.small_font.render(f"HP: {current}/{total}", True, Config.COLORS['WHITE'])
+        self.screen.blit(hp_text, hp_text.get_rect(center=bar_rect.center))
+
+    def _render_resource_bar(self, current: int, area: pygame.Rect):
+        # Placeholder for resource bar
+        resource_text = self.small_font.render(f"资源: {current}", True, Config.COLORS['GOLD'])
+        self.screen.blit(resource_text, (area.left, area.bottom + 30))
+
     def _render_control_panel(self):
         """
-        渲染控制面板
+        渲染技能控制面板
         """
-        # 控制面板背景
-        pygame.draw.rect(self.screen, Config.COLORS['GRAY'], self.control_area)
-        pygame.draw.rect(self.screen, Config.COLORS['WHITE'], self.control_area, 2)
+        pygame.draw.rect(self.screen, Config.COLORS['GRAY'], self.control_area, border_radius=5)
         
-        # 策略选择
-        strategy_title = self.font.render("选择战斗策略:", True, Config.COLORS['WHITE'])
-        self.screen.blit(strategy_title, (70, 540))
+        battle_state = self.game_engine.get_battle_state()
+        if not battle_state: return
+
+        x_offset = 70
+        self.skill_buttons.clear()
         
-        # 最优策略按钮
-        optimal_color = Config.COLORS['GREEN'] if self.selected_strategy == 'optimal' else Config.COLORS['DARK_GREEN']
-        optimal_btn = pygame.Rect(100, 580, 150, 40)
-        pygame.draw.rect(self.screen, optimal_color, optimal_btn)
-        pygame.draw.rect(self.screen, Config.COLORS['WHITE'], optimal_btn, 2)
-        
-        optimal_text = self.small_font.render("最优策略 (1)", True, Config.COLORS['WHITE'])
-        optimal_text_rect = optimal_text.get_rect(center=optimal_btn.center)
-        self.screen.blit(optimal_text, optimal_text_rect)
-        
-        # 随机策略按钮
-        random_color = Config.COLORS['BLUE'] if self.selected_strategy == 'random' else Config.COLORS['DARK_GREEN']
-        random_btn = pygame.Rect(270, 580, 150, 40)
-        pygame.draw.rect(self.screen, random_color, random_btn)
-        pygame.draw.rect(self.screen, Config.COLORS['WHITE'], random_btn, 2)
-        
-        random_text = self.small_font.render("随机策略 (2)", True, Config.COLORS['WHITE'])
-        random_text_rect = random_text.get_rect(center=random_btn.center)
-        self.screen.blit(random_text, random_text_rect)
-        
-        # 开始战斗按钮
-        battle_btn = pygame.Rect(440, 580, 150, 40)
-        pygame.draw.rect(self.screen, Config.COLORS['RED'], battle_btn)
-        pygame.draw.rect(self.screen, Config.COLORS['WHITE'], battle_btn, 2)
-        
-        battle_text = self.small_font.render("开始战斗 (空格)", True, Config.COLORS['WHITE'])
-        battle_text_rect = battle_text.get_rect(center=battle_btn.center)
-        self.screen.blit(battle_text, battle_text_rect)
-        
-        # 其他控制提示
-        controls_text = self.small_font.render("ESC: 退出战斗  L: 显示战斗日志", True, Config.COLORS['WHITE'])
-        self.screen.blit(controls_text, (70, 640))
-        
-        # 策略说明
-        if self.selected_strategy == 'optimal':
-            desc_text = self.small_font.render("最优策略: 使用分支限界算法找到最佳战斗序列", True, Config.COLORS['YELLOW'])
-        else:
-            desc_text = self.small_font.render("随机策略: 生成多个随机策略并选择最佳方案", True, Config.COLORS['YELLOW'])
-        
-        self.screen.blit(desc_text, (70, 670))
-    
-    def _render_battle_log(self):
+        for skill_name, props in Config.SKILLS.items():
+            is_available = battle_state['available_skills'].get(skill_name, False)
+            
+            btn_rect = pygame.Rect(x_offset, 550, 150, 60)
+            self.skill_buttons[skill_name] = btn_rect
+            
+            color = Config.COLORS['BLUE'] if is_available and self.player_turn else Config.COLORS['DARK_GREEN']
+            pygame.draw.rect(self.screen, color, btn_rect, border_radius=5)
+            pygame.draw.rect(self.screen, Config.COLORS['WHITE'], btn_rect, 2, border_radius=5)
+            
+            name_text = self.small_font.render(props['name'], True, Config.COLORS['WHITE'])
+            self.screen.blit(name_text, (btn_rect.centerx - name_text.get_width() // 2, btn_rect.top + 5))
+            
+            cost_text = self.small_font.render(f"消耗: {props['cost']}", True, Config.COLORS['GOLD'])
+            self.screen.blit(cost_text, (btn_rect.centerx - cost_text.get_width() // 2, btn_rect.top + 25))
+            
+            cooldown = battle_state['skill_cooldowns'].get(skill_name, 0)
+            if cooldown > 0:
+                cooldown_text = self.small_font.render(f"冷却: {cooldown}", True, Config.COLORS['RED'])
+                self.screen.blit(cooldown_text, (btn_rect.centerx - cooldown_text.get_width() // 2, btn_rect.top + 45))
+
+            x_offset += 170
+
+    def _render_log_panel(self):
         """
         渲染战斗日志
         """
-        if not self.battle_log:
-            return
-        
-        # 日志面板背景
-        log_panel = pygame.Rect(50, 50, 700, 600)
-        pygame.draw.rect(self.screen, Config.COLORS['BLACK'], log_panel)
-        pygame.draw.rect(self.screen, Config.COLORS['WHITE'], log_panel, 2)
-        
-        # 日志标题
-        log_title = self.font.render("战斗日志", True, Config.COLORS['WHITE'])
-        self.screen.blit(log_title, (70, 70))
-        
-        # 显示最近的战斗日志
-        y_offset = 110
-        for i, log_entry in enumerate(self.battle_log[-15:]):  # 显示最近15条
-            if y_offset > 600:
-                break
-            
-            log_text = self.small_font.render(log_entry, True, Config.COLORS['WHITE'])
-            self.screen.blit(log_text, (70, y_offset))
-            y_offset += 25
-    
-    def add_battle_message(self, message: str):
+        log_area = pygame.Rect(50, 630, 700, 110)
+        pygame.draw.rect(self.screen, (20, 20, 20), log_area, border_radius=5)
+        pygame.draw.rect(self.screen, Config.COLORS['WHITE'], log_area, 1, border_radius=5)
+
+        y_offset = log_area.top + 5
+        for log_entry in self.battle_log[-4:]:
+             log_text = self.small_font.render(f"> {log_entry}", True, Config.COLORS['WHITE'])
+             self.screen.blit(log_text, (log_area.left + 10, y_offset))
+             y_offset += 25
+
+    def _render_animations(self):
         """
-        添加战斗消息
-        
-        Args:
-            message: 消息内容
+        渲染战斗动画
+        """
+        for anim in self.animations:
+            if anim['type'] in ['player_attack', 'boss_attack']:
+                color = Config.COLORS['RED']
+            elif anim['type'] == 'heal':
+                color = Config.COLORS['GREEN']
+            
+            alpha = int(255 * (anim['timer'] / 60)) # Fade out effect
+            text = self.font.render(anim['text'], True, color)
+            text.set_alpha(alpha)
+            
+            pos = (anim['pos'][0], anim['pos'][1] - (60 - anim['timer'])) # Move up
+            self.screen.blit(text, text.get_rect(center=pos))
+
+    def add_animation(self, anim_type: str, pos: Tuple, text: str):
+        """
+        添加一个动画到队列
+        """
+        self.animations.append({'type': anim_type, 'pos': pos, 'text': text, 'timer': 60})
+
+    def add_log(self, message: str):
+        """
+        添加一条日志
         """
         self.battle_log.append(message)
-        if len(self.battle_log) > 50:  # 限制日志长度
+        if len(self.battle_log) > 20:
             self.battle_log.pop(0) 

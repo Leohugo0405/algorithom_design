@@ -220,17 +220,22 @@ class GameUI:
         """
         执行自动游戏一步
         """
+        # AI遇到Boss时，直接在引擎层面解决战斗，不打开UI
+        game_state = self.game_engine.get_game_state()
+        if game_state.get('active_battle'):
+            self.add_message("AI遇到Boss，自动战斗...")
+            battle_result = self.game_engine.fight_boss('optimal') # 使用旧的快速战斗方法
+            if battle_result['success']:
+                self.add_message(f"AI战斗胜利: {battle_result['message']}")
+            else:
+                self.add_message(f"AI战斗失败: {battle_result['message']}")
+            return # 当前步骤只处理战斗
+
         result = self.game_engine.auto_play_step()
         
         if result['success']:
             if result.get('message'):
                 self.add_message(result['message'])
-            
-            # 检查是否有活跃的战斗
-            game_state = self.game_engine.get_game_state()
-            if game_state.get('active_battle'):
-                self.add_message("AI遇到Boss，自动进入战斗...")
-                self._handle_ai_boss_battle(game_state['active_battle'])
             
             if result.get('game_completed'):
                 self.auto_play = False
@@ -238,24 +243,6 @@ class GameUI:
         else:
             self.add_message(f"自动游戏错误: {result['message']}")
             self.auto_play = False
-    
-    def _handle_ai_boss_battle(self, battle_data: Dict):
-        """
-        处理AI的Boss战斗
-        
-        Args:
-            battle_data: 战斗数据
-        """
-        # AI直接使用游戏引擎进行战斗，不显示战斗界面
-        battle_result = self.game_engine.fight_boss('optimal')
-        
-        # 处理战斗结果
-        if battle_result['success']:
-            self.add_message(f"AI Boss战斗胜利！{battle_result['message']}")
-            if 'reward' in battle_result:
-                self.add_message(f"AI获得奖励: {battle_result['reward']}资源")
-        else:
-            self.add_message(f"AI Boss战斗失败: {battle_result['message']}")
     
     def _calculate_optimal_path(self):
         """
@@ -314,12 +301,18 @@ class GameUI:
         battle_result = battle_ui.run()
         
         # 处理战斗结果
-        if battle_result['success']:
-            self.add_message(f"Boss战斗胜利！{battle_result['message']}")
-            if 'reward' in battle_result:
-                self.add_message(f"获得奖励: {battle_result['reward']}资源")
+        if not battle_result:
+            return
+
+        status = battle_result.get('status')
+        message = battle_result.get('message', '战斗已结束。')
+
+        if status == 'victory':
+            self.add_message(f"Boss战斗胜利！ {message}")
+        elif status == 'defeat':
+            self.add_message(f"Boss战斗失败: {message}")
         else:
-            self.add_message(f"Boss战斗失败: {battle_result['message']}")
+            self.add_message(f"Boss战斗结束: {message}")
         
         # 恢复主游戏窗口
         pygame.display.set_mode((Config.WINDOW_WIDTH, Config.WINDOW_HEIGHT))

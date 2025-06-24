@@ -246,6 +246,10 @@ class GameEngine:
                 self.active_battle = {
                     'position': (x, y),
                     'boss_hp': Config.BOSS_HP,
+                    'initial_boss_hp': Config.BOSS_HP,
+                    'player_hp': self.player_hp,
+                    'initial_player_hp': self.player_hp,
+                    'skill_cooldowns': {skill: 0 for skill in Config.SKILLS},
                     'type': 'boss'
                 }
                 result = {
@@ -262,6 +266,104 @@ class GameEngine:
             }
         
         return result
+    
+    def get_battle_state(self) -> Optional[Dict]:
+        """
+        获取当前战斗状态
+        """
+        if not self.active_battle:
+            return None
+        
+        return {
+            'boss_hp': self.active_battle.get('boss_hp'),
+            'player_hp': self.player_hp,
+            'player_resources': self.player_resources,
+            'skill_cooldowns': self.active_battle.get('skill_cooldowns', {}),
+            'available_skills': self.get_available_skills()
+        }
+
+    def get_available_skills(self) -> Dict[str, bool]:
+        """
+        获取当前可用的战斗技能
+        """
+        if not self.active_battle:
+            return {}
+        
+        available = {}
+        for skill_name, properties in Config.SKILLS.items():
+            can_use = True
+            if self.player_resources < properties['cost']:
+                can_use = False
+            if self.active_battle.get('skill_cooldowns', {}).get(skill_name, 0) > 0:
+                can_use = False
+            available[skill_name] = can_use
+        return available
+
+    def execute_battle_turn(self, player_action: str) -> Dict:
+        """
+        执行一个完整的战斗回合：玩家行动，然后Boss行动
+        """
+        if not self.active_battle or player_action not in Config.SKILLS:
+            return {'success': False, 'message': '无效的操作'}
+            
+        turn_result = {
+            'player_action': {'skill': player_action, 'damage': 0, 'heal': 0},
+            'boss_action': {'damage': 0},
+            'status': 'ongoing',
+            'success': True
+        }
+
+        # 更新冷却时间
+        for skill in self.active_battle['skill_cooldowns']:
+            if self.active_battle['skill_cooldowns'][skill] > 0:
+                self.active_battle['skill_cooldowns'][skill] -= 1
+
+        # 1. 玩家行动
+        skill = Config.SKILLS[player_action]
+        if not self.get_available_skills().get(player_action):
+            return {'success': False, 'message': f"无法使用 '{skill['name']}'"}
+
+        self.player_resources -= skill['cost']
+        self.active_battle['skill_cooldowns'][player_action] = skill['cooldown']
+        
+        if 'damage' in skill:
+            damage = skill['damage']
+            self.active_battle['boss_hp'] -= damage
+            turn_result['player_action']['damage'] = damage
+        
+        if 'heal_amount' in skill:
+            heal = skill['heal_amount']
+            self.player_hp = min(self.active_battle['initial_player_hp'], self.player_hp + heal)
+            turn_result['player_action']['heal'] = heal
+
+        # 检查Boss是否被击败
+        if self.active_battle['boss_hp'] <= 0:
+            self.active_battle['boss_hp'] = 0
+            turn_result['status'] = 'victory'
+            self.defeated_bosses.add(self.active_battle['position'])
+            reward = 50
+            self.player_resources += reward
+            self.total_value_collected += reward
+            turn_result['reward'] = reward
+            turn_result['message'] = f"你赢了！获得 {reward} 资源奖励。"
+            self.active_battle = None
+            return turn_result
+
+        # 2. Boss行动 (简单AI：直接攻击)
+        boss_damage = Config.BOSS_ATTACK_DAMAGE
+        self.player_hp -= boss_damage
+        turn_result['boss_action']['damage'] = boss_damage
+
+        # 检查玩家是否被击败
+        if self.player_hp <= 0:
+            self.player_hp = 0
+            turn_result['status'] = 'defeat'
+            turn_result['message'] = "你被击败了！"
+            self.player_hp = self.active_battle['initial_player_hp'] // 2 # 惩罚：半血复活
+            self.active_battle = None
+            return turn_result
+            
+        return turn_result
     
     def solve_puzzle(self, puzzle_type: str = 'auto') -> Dict:
         """
