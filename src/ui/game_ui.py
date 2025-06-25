@@ -11,6 +11,7 @@ from typing import Dict, List, Tuple, Optional
 from src.config import Config
 from src.game_engine import GameEngine
 from src.ui.battle_ui import BattleUI
+from src.ui.lock_ui import LockUI
 
 class GameUI:
     """
@@ -208,6 +209,10 @@ class GameUI:
                     # 检查是否遇到Boss
                     if interaction.get('type') == 'boss':
                         self._handle_boss_encounter(interaction)
+                    
+                    # 检查是否遇到密码锁
+                    elif interaction.get('type') == 'puzzle':
+                        self._handle_lock_encounter(interaction)
                 else:
                     self.add_message(result['message'])
     
@@ -286,24 +291,42 @@ class GameUI:
         else:
             self.add_message("路径比较失败")
     
-    # def _handle_lock_encounter(self, interaction: Dict):
-    #     """
-    #     处理Lock遭遇事件
+    def _handle_lock_encounter(self, interaction: Dict):
+        """
+        处理Lock遭遇事件
         
-    #     Args:
-    #         interaction: 交互信息
-    #     """
-    #     self.add_message("进入解谜界面...")
-
-    #     # 创建谜题数据
-    #     lock_data = {
-    #         'puzzle':
-    #         'position': self.game_engine.player_pos
-    #     }
-
-    #     # 创建并运行解密界面
-    #     lock_ui = LockUI(self.game_engine, lock_data)
-    #     battle_result=lock_ui.run()
+        Args:
+            interaction: 交互信息
+        """
+        self.add_message("发现密码锁，进入解谜界面...")
+        
+        # 创建谜题数据
+        lock_data = {
+            'puzzle': interaction.get('puzzle'),
+            'position': self.game_engine.player_pos
+        }
+        
+        # 创建并运行解谜界面
+        lock_ui = LockUI(self.game_engine, lock_data)
+        puzzle_result = lock_ui.run()
+        
+        # 处理解谜结果
+        if puzzle_result['success']:
+            self.add_message("密码锁解开成功！")
+            # 在游戏引擎中标记谜题已解决
+            if hasattr(self.game_engine, 'active_puzzle') and self.game_engine.active_puzzle:
+                self.game_engine.solved_puzzles.add(self.game_engine.active_puzzle['position'])
+                reward = 20
+                self.game_engine.player_resources += reward
+                self.game_engine.total_value_collected += reward
+                self.add_message(f"获得{reward}资源奖励！")
+                self.game_engine.active_puzzle = None
+        else:
+            self.add_message("解谜失败或取消")
+        
+        # 恢复主游戏窗口
+        pygame.display.set_mode((Config.WINDOW_WIDTH, Config.WINDOW_HEIGHT))
+        pygame.display.set_caption(Config.WINDOW_TITLE)
 
     def _handle_boss_encounter(self, interaction: Dict):
         """
