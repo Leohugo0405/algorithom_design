@@ -10,7 +10,8 @@ import sys
 from typing import Dict, List, Tuple, Optional
 from src.config import Config
 from src.game_engine import GameEngine
-# from src.ui.battle_ui import BattleUI  # 已替换为多怪物战斗系统
+from src.ui.battle_ui import BattleUI
+from src.ui.lock_ui import LockUI
 
 class GameUI:
     """
@@ -38,7 +39,8 @@ class GameUI:
         self.auto_play = False
         self.auto_play_speed = 500  # 毫秒
         self.last_auto_step = 0
-        
+        self.game_completed = False  # 游戏是否已结束
+
         # 显示面板
         self.show_statistics = True
         self.show_controls = True
@@ -145,6 +147,8 @@ class GameUI:
                 self.add_message("游戏重新开始！")
                 self.optimal_path = []
                 self.greedy_path = []
+                self.game_completed = False  # 重置游戏结束标志
+
             
         elif key == pygame.K_a:
             # 切换自动游戏
@@ -181,7 +185,8 @@ class GameUI:
             # 比较路径策略
             self._compare_path_strategies()
         
-        elif not self.auto_play and not self.paused:
+        elif not self.auto_play and not self.paused and not self.game_completed:
+
             # 手动移动控制
             direction = None
             if key == pygame.K_UP or key == pygame.K_w:
@@ -203,22 +208,32 @@ class GameUI:
                     # 删除已拾取金币格子
                     pos = self.game_engine.player_pos
                     i, j = pos
-                    if self.game_engine.maze[i][j] == 'L':
-                        self.add_message("触发解谜挑战...")
-                        puzzle_result = self.game_engine.solve_puzzle()  # 调用解谜逻辑
-                        if puzzle_result:
-                            self.add_message("解谜成功！")
-                            self.game_engine.maze[i][j] = Config.PATH  # 转为空地
-                        else:
-                            self.add_message("解谜失败，返回原位置。")
-                            self.game_engine.player_pos = prev_pos  # 回退
-                            return  # 中断处理
+                    # 旧的L格处理逻辑已移除，现在使用interaction系统处理
+                    # 检查是否触发陷阱
+                    if self.game_engine.maze[i][j] == 'T':
+                        self.add_message("⚠️ 你触发了一个陷阱！")
+                        self._play_trap_animation()  # 显示动画提示
+                        self.game_engine.player_hp -= 10  # 扣除生命值（可自定义）
+                        self.add_message("生命值 -10")
+                        self.game_engine.maze[i][j] = Config.PATH  # 陷阱只触发一次，设为空地
+
+                    if self.game_engine.maze[i][j] == 'E':
+                        self.add_message("🎉 恭喜！你已到达出口，游戏结束！")
+                        self.game_completed = True  # ✅ 标记游戏结束
+                        return  # 停止后续处理
                     if self.game_engine.maze[i][j] == Config.GOLD:
                         self.game_engine.maze[i][j] = Config.PATH  # 将金币格子改为空白路径
 
                     # 检查是否遇到多怪物战斗
                     if interaction.get('type') == 'multi_monster_battle':
                         self._handle_multi_monster_battle(interaction)
+                    # 检查是否遇到Boss
+                    elif interaction.get('type') == 'boss':
+                        self._handle_boss_encounter(interaction)
+                    
+                    # 检查是否遇到密码锁
+                    elif interaction.get('type') == 'puzzle':
+                        self._handle_lock_encounter(interaction)
                 else:
                     self.add_message(result['message'])
     
@@ -276,7 +291,19 @@ class GameUI:
         else:
             self.add_message(f"自动游戏错误: {result['message']}")
             self.auto_play = False
+    def _play_trap_animation(self):
     
+    #显示陷阱触发动画（例如红色闪烁）
+    
+        for _ in range(3):
+            self.screen.fill((255, 0, 0))  # 红色闪屏
+            pygame.display.flip()
+            pygame.time.delay(100)
+            
+            self._render()  # 恢复正常画面
+            pygame.display.flip()
+            pygame.time.delay(100)
+
     def _calculate_optimal_path(self):
         """
         计算并缓存最优路径
@@ -314,24 +341,42 @@ class GameUI:
         else:
             self.add_message("路径比较失败")
     
-    # def _handle_lock_encounter(self, interaction: Dict):
-    #     """
-    #     处理Lock遭遇事件
+    def _handle_lock_encounter(self, interaction: Dict):
+        """
+        处理Lock遭遇事件
         
-    #     Args:
-    #         interaction: 交互信息
-    #     """
-    #     self.add_message("进入解谜界面...")
-
-    #     # 创建谜题数据
-    #     lock_data = {
-    #         'puzzle':
-    #         'position': self.game_engine.player_pos
-    #     }
-
-    #     # 创建并运行解密界面
-    #     lock_ui = LockUI(self.game_engine, lock_data)
-    #     battle_result=lock_ui.run()
+        Args:
+            interaction: 交互信息
+        """
+        self.add_message("发现密码锁，进入解谜界面...")
+        
+        # 创建谜题数据
+        lock_data = {
+            'puzzle': interaction.get('puzzle'),
+            'position': self.game_engine.player_pos
+        }
+        
+        # 创建并运行解谜界面
+        lock_ui = LockUI(self.game_engine, lock_data)
+        puzzle_result = lock_ui.run()
+        
+        # 处理解谜结果
+        if puzzle_result['success']:
+            self.add_message("密码锁解开成功！")
+            # 在游戏引擎中标记谜题已解决
+            if hasattr(self.game_engine, 'active_puzzle') and self.game_engine.active_puzzle:
+                self.game_engine.solved_puzzles.add(self.game_engine.active_puzzle['position'])
+                reward = 20
+                self.game_engine.player_resources += reward
+                self.game_engine.total_value_collected += reward
+                self.add_message(f"获得{reward}资源奖励！")
+                self.game_engine.active_puzzle = None
+        else:
+            self.add_message("解谜失败或取消")
+        
+        # 恢复主游戏窗口
+        pygame.display.set_mode((Config.WINDOW_WIDTH, Config.WINDOW_HEIGHT))
+        pygame.display.set_caption(Config.WINDOW_TITLE)
 
     def _handle_multi_monster_battle(self, interaction: Dict):
         """
@@ -357,7 +402,11 @@ class GameUI:
         message = battle_result.get('message', '战斗已结束。')
 
         if status == 'victory':
-            self.add_message(f"多怪物战斗胜利！ {message}")
+            self.add_message(f"Boss战斗胜利！ {message}")
+            # ✅ 删除 Boss 格子
+            i, j = self.game_engine.player_pos
+            if self.game_engine.maze[i][j] == 'B':
+                self.game_engine.maze[i][j] = Config.PATH  # 将 Boss 格子变为空地
         elif status == 'defeat':
             self.add_message(f"多怪物战斗失败: {message}")
         else:
@@ -417,6 +466,11 @@ class GameUI:
                 y = start_y + i * cell_size
                 
                 cell = maze[i][j]
+                
+                # 如果是已解决的谜题，显示为普通路径
+                if cell == Config.LOCKER and (i, j) in self.game_engine.solved_puzzles:
+                    cell = Config.PATH
+                
                 color = Config.ELEMENT_COLORS.get(cell, Config.COLORS['WHITE'])
                 
                 # 绘制格子
