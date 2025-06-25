@@ -398,7 +398,7 @@ class MultiMonsterBattleUI:
             pygame.draw.rect(self.screen, Config.COLORS['WHITE'], button_rect, 2)
             
             # 技能文本
-            skill_text = f"{skill_info['name']} (消耗: {skill_info.get('cost', 0)})"
+            skill_text = f"{skill_info['name']} (冷却: {skill_info.get('cooldown', 0)}回合)"
             text_surface = self.small_font.render(skill_text, True, Config.COLORS['BLACK'])
             text_rect = text_surface.get_rect(center=button_rect.center)
             self.screen.blit(text_surface, text_rect)
@@ -590,7 +590,7 @@ class MultiMonsterBattleUI:
                 skill_info = Config.SKILLS[skill_name]
                 
                 # 基本技能信息
-                skill_text = f"{i+1}. {skill_info['name']} (伤害: {skill_info.get('damage', 0)}, 消耗: {skill_info['cost']})"
+                skill_text = f"{i+1}. {skill_info['name']} (伤害: {skill_info.get('damage', 0)}, 冷却: {skill_info.get('cooldown', 0)}回合)"
                 skill_surface = self.small_font.render(skill_text, True, Config.COLORS['WHITE'])
                 self.screen.blit(skill_surface, (result_rect.x + 40, result_rect.y + y_offset))
                 y_offset += 20
