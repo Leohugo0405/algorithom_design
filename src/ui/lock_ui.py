@@ -34,9 +34,12 @@ class LockUI:
         self.input_boxes = []
         self.submit_button = None
         self.auto_solve_button = None
-        self.back_button = None
         self.number_buttons = []  # 数字按键
         self.clear_button = None  # 清除按钮
+        
+        # 在终端输出密码锁答案（调试用）
+        correct_password = self.lock_data['puzzle']['password']
+        print(f"密码锁答案: {''.join(map(str, correct_password))}")
         
         # 初始化pygame
         self._initialize_pygame()
@@ -103,7 +106,6 @@ class LockUI:
         self.clear_button = pygame.Rect(320, 540, button_width, button_height)
         self.submit_button = pygame.Rect(430, 540, button_width, button_height)
         self.auto_solve_button = pygame.Rect(540, 540, button_width, button_height)
-        self.back_button = pygame.Rect(50, 50, 80, 30)
     
     def run(self) -> Dict:
         """
@@ -189,9 +191,6 @@ class LockUI:
         
         elif self.auto_solve_button.collidepoint(pos):
             self._auto_solve()
-        
-        elif self.back_button.collidepoint(pos):
-            self.running = False
     
     def _submit_answer(self):
         """
@@ -350,13 +349,6 @@ class LockUI:
         auto_text = self.small_font.render("AI解谜", True, Config.COLORS['WHITE'])
         auto_rect = auto_text.get_rect(center=self.auto_solve_button.center)
         self.screen.blit(auto_text, auto_rect)
-        
-        # 返回按钮
-        pygame.draw.rect(self.screen, Config.COLORS['GRAY'], self.back_button)
-        pygame.draw.rect(self.screen, Config.COLORS['BLACK'], self.back_button, 2)
-        back_text = self.small_font.render("返回", True, Config.COLORS['WHITE'])
-        back_rect = back_text.get_rect(center=self.back_button.center)
-        self.screen.blit(back_text, back_rect)
     
     def _render_result_message(self):
         """
