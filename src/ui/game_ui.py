@@ -346,7 +346,7 @@ class GameUI:
         }
         
         # 创建并运行解谜界面
-        lock_ui = LockUI(self.game_engine, lock_data)
+        lock_ui = LockUI(self.game_engine, lock_data, self.screen)
         puzzle_result = lock_ui.run()
         
         # 处理解谜结果

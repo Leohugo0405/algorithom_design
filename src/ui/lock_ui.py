@@ -12,10 +12,10 @@ from src.config import Config
 from src.game_engine import GameEngine
 
 class LockUI:
-    def __init__(self, game_engine: GameEngine, lock_data: Dict):
+    def __init__(self, game_engine: GameEngine, lock_data: Dict, screen=None):
         self.game_engine = game_engine
         self.lock_data = lock_data
-        self.screen = None
+        self.screen = screen  # 使用传入的screen或创建新的
         self.clock = None
         self.font = None
         self.small_font = None
@@ -48,9 +48,10 @@ class LockUI:
         """
         初始化pygame组件
         """
-        # 创建窗口
-        self.screen = pygame.display.set_mode((800, 600))
-        pygame.display.set_caption("密码锁解谜")
+        # 如果没有传入screen，则创建新窗口
+        if self.screen is None:
+            self.screen = pygame.display.set_mode((800, 600))
+            pygame.display.set_caption("密码锁解谜")
         
         # 创建时钟
         self.clock = pygame.time.Clock()
@@ -124,6 +125,9 @@ class LockUI:
             # 控制帧率
             self.clock.tick(Config.FPS)
         
+        # 清理pygame定时器
+        pygame.time.set_timer(pygame.USEREVENT + 1, 0)
+        
         # 返回解谜结果
         return {
             'success': self.puzzle_solved,
@@ -136,7 +140,9 @@ class LockUI:
         """
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                # 只退出解谜界面，不退出整个程序
                 self.running = False
+                self.result_message = "解谜取消"
             
             elif event.type == pygame.KEYDOWN:
                 self._handle_keydown(event.key)
