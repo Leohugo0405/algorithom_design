@@ -13,29 +13,45 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from src.game_engine import GameEngine
 from src.ui.game_ui import GameUI
-from src.config import Config
+
+def show_main_menu():
+    """
+    显示主菜单
+    """
+    print("=== 算法驱动的迷宫探险游戏 ===")
+    print("1. 开始游戏")
+    print("2. 退出")
+    
+    choice = input("\n请选择 (1-2): ").strip()
+    return choice
+
+
 
 def main():
     """
     游戏主函数
     """
-    # 初始化pygame
-    pygame.init()
+    while True:
+        # 开始游戏
+        pygame.init()
+        try:
+            # 创建游戏引擎
+            game_engine = GameEngine()
+                
+            # 创建游戏UI
+            game_ui = GameUI(game_engine)
+                
+            # 运行游戏
+            game_ui.run()
+                
+        except Exception as e:
+            print(f"游戏运行出错: {e}")
+        finally:
+            pygame.quit()
+        
+        
+        
     
-    try:
-        # 创建游戏引擎
-        game_engine = GameEngine()
-        
-        # 创建游戏UI
-        game_ui = GameUI(game_engine)
-        
-        # 运行游戏
-        game_ui.run()
-        
-    except Exception as e:
-        print(f"游戏运行出错: {e}")
-    finally:
-        pygame.quit()
         sys.exit()
 
 if __name__ == "__main__":

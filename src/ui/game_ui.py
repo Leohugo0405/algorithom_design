@@ -10,7 +10,7 @@ import sys
 from typing import Dict, List, Tuple, Optional
 from src.config import Config
 from src.game_engine import GameEngine
-from src.ui.battle_ui import BattleUI
+# from src.ui.battle_ui import BattleUI  # 已替换为多怪物战斗系统
 
 class GameUI:
     """
@@ -216,9 +216,9 @@ class GameUI:
                     if self.game_engine.maze[i][j] == Config.GOLD:
                         self.game_engine.maze[i][j] = Config.PATH  # 将金币格子改为空白路径
 
-                    # 检查是否遇到Boss
-                    if interaction.get('type') == 'boss':
-                        self._handle_boss_encounter(interaction)
+                    # 检查是否遇到多怪物战斗
+                    if interaction.get('type') == 'multi_monster_battle':
+                        self._handle_multi_monster_battle(interaction)
                 else:
                     self.add_message(result['message'])
     
@@ -236,15 +236,32 @@ class GameUI:
         """
         执行自动游戏一步
         """
-        # AI遇到Boss时，直接在引擎层面解决战斗，不打开UI
+        # AI遇到多怪物战斗时，直接在引擎层面解决战斗，不打开UI
         game_state = self.game_engine.get_game_state()
-        if game_state.get('active_battle'):
-            self.add_message("AI遇到Boss，自动战斗...")
-            battle_result = self.game_engine.fight_boss('optimal') # 使用旧的快速战斗方法
-            if battle_result['success']:
-                self.add_message(f"AI战斗胜利: {battle_result['message']}")
-            else:
-                self.add_message(f"AI战斗失败: {battle_result['message']}")
+        if game_state.get('active_multi_battle'):
+            self.add_message("AI遇到怪物群，自动战斗...")
+            # AI使用简单策略：优先攻击血量最少的怪物
+            while self.game_engine.active_multi_battle and not self.game_engine.active_multi_battle.is_battle_over():
+                battle_state = self.game_engine.get_multi_battle_state()
+                if not battle_state['alive_monsters']:
+                    break
+                    
+                # 选择普通攻击和血量最少的怪物
+                target_suggestion = self.game_engine.get_multi_battle_target_suggestion('normal_attack')
+                if target_suggestion:
+                    result = self.game_engine.execute_multi_battle_turn('normal_attack', target_suggestion)
+                    if result.get('battle_over'):
+                        break
+                else:
+                    break
+            
+            # 获取战斗结果
+            if self.game_engine.active_multi_battle:
+                battle_result = self.game_engine.active_multi_battle.get_battle_result()
+                if battle_result['status'] == 'victory':
+                    self.add_message(f"AI战斗胜利: {battle_result['message']}")
+                else:
+                    self.add_message(f"AI战斗失败: {battle_result['message']}")
             return # 当前步骤只处理战斗
 
         result = self.game_engine.auto_play_step()
@@ -316,23 +333,20 @@ class GameUI:
     #     lock_ui = LockUI(self.game_engine, lock_data)
     #     battle_result=lock_ui.run()
 
-    def _handle_boss_encounter(self, interaction: Dict):
+    def _handle_multi_monster_battle(self, interaction: Dict):
         """
-        处理Boss遭遇事件
+        处理多怪物战斗遭遇事件
         
         Args:
             interaction: 交互信息
         """
-        self.add_message("进入Boss战斗界面...")
+        from .multi_battle_ui import MultiMonsterBattleUI
         
-        # 创建Boss数据
-        boss_data = {
-            'boss_hp': interaction.get('boss_hp', Config.BOSS_HP),
-            'position': self.game_engine.player_pos
-        }
+        scenario = interaction.get('scenario', 'medium')
+        self.add_message(f"进入多怪物战斗界面... {interaction.get('message', '')}")
         
-        # 创建并运行战斗UI
-        battle_ui = BattleUI(self.game_engine, boss_data)
+        # 创建并运行多怪物战斗UI
+        battle_ui = MultiMonsterBattleUI(scenario)
         battle_result = battle_ui.run()
         
         # 处理战斗结果
@@ -343,11 +357,11 @@ class GameUI:
         message = battle_result.get('message', '战斗已结束。')
 
         if status == 'victory':
-            self.add_message(f"Boss战斗胜利！ {message}")
+            self.add_message(f"多怪物战斗胜利！ {message}")
         elif status == 'defeat':
-            self.add_message(f"Boss战斗失败: {message}")
+            self.add_message(f"多怪物战斗失败: {message}")
         else:
-            self.add_message(f"Boss战斗结束: {message}")
+            self.add_message(f"多怪物战斗结束: {message}")
         
         # 恢复主游戏窗口
         pygame.display.set_mode((Config.WINDOW_WIDTH, Config.WINDOW_HEIGHT))

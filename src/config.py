@@ -97,6 +97,54 @@ class Config:
     # 密码锁参数
     LOCK_DIGITS = 3  # 密码位数
     
+    # 多怪物战斗配置
+    MONSTER_TYPES = {
+        'goblin': {
+            'name': '哥布林',
+            'hp': 25,
+            'attack': 6,
+            'defense': 1
+        },
+        'orc': {
+            'name': '兽人',
+            'hp': 40,
+            'attack': 10,
+            'defense': 2
+        },
+        'skeleton': {
+            'name': '骷髅战士',
+            'hp': 30,
+            'attack': 8,
+            'defense': 0
+        },
+        'troll': {
+            'name': '巨魔',
+            'hp': 60,
+            'attack': 12,
+            'defense': 3
+        }
+    }
+    
+    # 多怪物战斗场景配置
+    MULTI_BATTLE_SCENARIOS = {
+        'easy': {
+            'name': '简单战斗',
+            'monsters': ['goblin', 'goblin']
+        },
+        'medium': {
+            'name': '中等战斗', 
+            'monsters': ['goblin', 'orc', 'skeleton']
+        },
+        'hard': {
+            'name': '困难战斗',
+            'monsters': ['orc', 'orc', 'troll']
+        },
+        'nightmare': {
+            'name': '噩梦战斗',
+            'monsters': ['skeleton', 'orc', 'troll', 'goblin']
+        }
+    }
+    
     # 算法参数
     RESOURCE_DENSITY = 0.1  # 资源密度 (10%的通路包含资源)
     TRAP_DENSITY = 0.05  # 陷阱密度 (5%的通路包含陷阱)
