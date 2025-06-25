@@ -10,7 +10,6 @@ import sys
 from typing import Dict, List, Tuple, Optional
 from src.config import Config
 from src.game_engine import GameEngine
-from src.ui.battle_ui import BattleUI
 from src.ui.lock_ui import LockUI
 
 class GameUI:
