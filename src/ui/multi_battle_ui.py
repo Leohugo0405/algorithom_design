@@ -10,6 +10,7 @@ import math
 from typing import Dict, List, Tuple, Optional
 from ..config import Config
 from ..battle.multi_monster_battle import MultiMonsterBattle
+from ..algorithms.boss_strategy import BossStrategy
 
 class MultiMonsterBattleUI:
     """
@@ -47,6 +48,9 @@ class MultiMonsterBattleUI:
         self.selected_target = None
         self.battle_result = None
         self.show_target_selection = False
+        self.show_strategy_result = False
+        self.optimal_strategy = None
+        self.strategy_stats = None
         
         # UI布局
         self.player_area = pygame.Rect(50, 500, 300, 150)
@@ -60,6 +64,7 @@ class MultiMonsterBattleUI:
         self.monster_buttons = {}
         self.confirm_button = pygame.Rect(600, 670, 100, 30)
         self.cancel_button = pygame.Rect(720, 670, 100, 30)
+        self.strategy_button = pygame.Rect(50, 680, 150, 30)  # 策略优化按钮
         
         self._initialize_pygame()
     
@@ -98,7 +103,9 @@ class MultiMonsterBattleUI:
             
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    if self.show_target_selection:
+                    if self.show_strategy_result:
+                        self._close_strategy_result()
+                    elif self.show_target_selection:
                         self.show_target_selection = False
                         self.selected_skill = None
                     else:
@@ -147,6 +154,10 @@ class MultiMonsterBattleUI:
                             # 非攻击技能直接执行
                             self._execute_skill(skill_name)
                     break
+            
+            # 检查策略优化按钮
+            if self.strategy_button.collidepoint(pos):
+                self._show_strategy_optimization()
     
     def _execute_skill(self, skill_name: str, target_id: Optional[int] = None):
         """执行技能"""
@@ -171,6 +182,36 @@ class MultiMonsterBattleUI:
         if self.selected_skill and self.selected_target is not None:
             self._execute_skill(self.selected_skill, self.selected_target)
     
+    def _show_strategy_optimization(self):
+        """显示BOSS战策略优化"""
+        if not self.battle.battle_active:
+            return
+        
+        # 计算当前最强怪物的血量作为BOSS血量
+        battle_state = self.battle.get_battle_state()
+        alive_monsters = [m for m in battle_state['monsters'] if m['alive']]
+        if not alive_monsters:
+            return
+        
+        # 选择血量最高的怪物作为BOSS
+        boss_hp = max(m['current_hp'] for m in alive_monsters)
+        player_resources = battle_state['player_resources']
+        
+        # 创建BossStrategy实例并寻找最优策略
+        boss_strategy = BossStrategy(boss_hp=boss_hp, player_resources=player_resources)
+        optimal_sequence, min_rounds, stats = boss_strategy.find_optimal_strategy(max_rounds=15)
+        
+        # 保存结果
+        self.optimal_strategy = optimal_sequence
+        self.strategy_stats = stats
+        self.show_strategy_result = True
+    
+    def _close_strategy_result(self):
+        """关闭策略结果显示"""
+        self.show_strategy_result = False
+        self.optimal_strategy = None
+        self.strategy_stats = None
+    
     def _update(self):
         """更新游戏状态"""
         pass
@@ -191,6 +232,12 @@ class MultiMonsterBattleUI:
         
         if self.show_target_selection:
             self._render_target_selection()
+        
+        # 渲染策略优化按钮
+        self._render_strategy_button()
+        
+        if self.show_strategy_result:
+            self._render_strategy_result()
         
         pygame.display.flip()
     
@@ -395,3 +442,81 @@ class MultiMonsterBattleUI:
         cancel_text = self.small_font.render("取消", True, Config.COLORS['WHITE'])
         cancel_rect = cancel_text.get_rect(center=self.cancel_button.center)
         self.screen.blit(cancel_text, cancel_rect)
+    
+    def _render_strategy_button(self):
+        """渲染策略优化按钮"""
+        if not self.battle.battle_active or self.show_target_selection or self.show_strategy_result:
+            return
+        
+        # 按钮背景
+        pygame.draw.rect(self.screen, Config.COLORS['PURPLE'], self.strategy_button)
+        pygame.draw.rect(self.screen, Config.COLORS['WHITE'], self.strategy_button, 2)
+        
+        # 按钮文字
+        button_text = self.small_font.render("BOSS战策略优化", True, Config.COLORS['WHITE'])
+        text_rect = button_text.get_rect(center=self.strategy_button.center)
+        self.screen.blit(button_text, text_rect)
+    
+    def _render_strategy_result(self):
+        """渲染策略优化结果"""
+        # 创建半透明覆盖层
+        overlay = pygame.Surface((800, 720))
+        overlay.set_alpha(180)
+        overlay.fill(Config.COLORS['BLACK'])
+        self.screen.blit(overlay, (0, 0))
+        
+        # 结果窗口
+        result_rect = pygame.Rect(100, 100, 600, 520)
+        pygame.draw.rect(self.screen, Config.COLORS['BLUE'], result_rect)
+        pygame.draw.rect(self.screen, Config.COLORS['WHITE'], result_rect, 3)
+        
+        # 标题
+        title_text = self.title_font.render("BOSS战策略优化结果", True, Config.COLORS['WHITE'])
+        self.screen.blit(title_text, (result_rect.x + 20, result_rect.y + 20))
+        
+        y_offset = 70
+        
+        if self.optimal_strategy:
+            # 最优策略信息
+            strategy_title = self.font.render(f"最优技能序列 (共{len(self.optimal_strategy)}回合):", True, Config.COLORS['YELLOW'])
+            self.screen.blit(strategy_title, (result_rect.x + 20, result_rect.y + y_offset))
+            y_offset += 40
+            
+            # 技能序列
+            for i, skill_name in enumerate(self.optimal_strategy):
+                skill_info = Config.SKILLS[skill_name]
+                skill_text = f"{i+1}. {skill_info['name']} (伤害: {skill_info.get('damage', 0)}, 消耗: {skill_info['cost']})"
+                skill_surface = self.small_font.render(skill_text, True, Config.COLORS['WHITE'])
+                self.screen.blit(skill_surface, (result_rect.x + 40, result_rect.y + y_offset))
+                y_offset += 25
+                
+                if y_offset > result_rect.height - 100:  # 防止超出窗口
+                    break
+        else:
+            # 无解情况
+            no_solution_text = self.font.render("在当前条件下无法找到可行的策略", True, Config.COLORS['RED'])
+            self.screen.blit(no_solution_text, (result_rect.x + 20, result_rect.y + y_offset))
+            y_offset += 40
+        
+        # 统计信息
+        if self.strategy_stats:
+            y_offset += 20
+            stats_title = self.font.render("算法统计信息:", True, Config.COLORS['YELLOW'])
+            self.screen.blit(stats_title, (result_rect.x + 20, result_rect.y + y_offset))
+            y_offset += 30
+            
+            stats_info = [
+                f"探索节点数: {self.strategy_stats['nodes_explored']}",
+                f"剪枝节点数: {self.strategy_stats['nodes_pruned']}",
+                f"缓存状态数: {self.strategy_stats['states_cached']}",
+                f"最优回合数: {self.strategy_stats['optimal_rounds']}"
+            ]
+            
+            for stat in stats_info:
+                stat_surface = self.small_font.render(stat, True, Config.COLORS['WHITE'])
+                self.screen.blit(stat_surface, (result_rect.x + 40, result_rect.y + y_offset))
+                y_offset += 25
+        
+        # 关闭提示
+        close_hint = self.small_font.render("按ESC键关闭", True, Config.COLORS['GRAY'])
+        self.screen.blit(close_hint, (result_rect.x + result_rect.width - 120, result_rect.y + result_rect.height - 30))
