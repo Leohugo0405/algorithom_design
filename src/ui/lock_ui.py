@@ -12,14 +12,23 @@ from src.config import Config
 from src.game_engine import GameEngine
 
 class LockUI:
-    def __init__(self, game_engine: GameEngine, lock_data: Dict, screen=None):
+    def __init__(self, game_engine: GameEngine, lock_data: Dict):
         self.game_engine = game_engine
         self.lock_data = lock_data
-        self.screen = screen  # 使用传入的screen或创建新的
+        self.screen = None
         self.clock = None
         self.font = None
         self.small_font = None
         self.title_font = None
+        
+        # 在终端输出猜谜答案
+        if 'puzzle' in lock_data and 'password' in lock_data['puzzle']:
+            password = lock_data['puzzle']['password']
+            password_str = ''.join(map(str, password))
+            print(f"[调试信息] 密码锁答案: {password_str}")
+        
+        # 清除可能存在的定时器，防止影响新的解谜界面
+        pygame.time.set_timer(pygame.USEREVENT + 1, 0)
         
         # 解谜状态
         self.running = True
@@ -34,12 +43,9 @@ class LockUI:
         self.input_boxes = []
         self.submit_button = None
         self.auto_solve_button = None
+        self.back_button = None
         self.number_buttons = []  # 数字按键
         self.clear_button = None  # 清除按钮
-        
-        # 在终端输出密码锁答案（调试用）
-        correct_password = self.lock_data['puzzle']['password']
-        print(f"密码锁答案: {''.join(map(str, correct_password))}")
         
         # 初始化pygame
         self._initialize_pygame()
@@ -48,10 +54,9 @@ class LockUI:
         """
         初始化pygame组件
         """
-        # 如果没有传入screen，则创建新窗口
-        if self.screen is None:
-            self.screen = pygame.display.set_mode((800, 600))
-            pygame.display.set_caption("密码锁解谜")
+        # 创建窗口
+        self.screen = pygame.display.set_mode((800, 600))
+        pygame.display.set_caption("密码锁解谜")
         
         # 创建时钟
         self.clock = pygame.time.Clock()
@@ -107,6 +112,7 @@ class LockUI:
         self.clear_button = pygame.Rect(320, 540, button_width, button_height)
         self.submit_button = pygame.Rect(430, 540, button_width, button_height)
         self.auto_solve_button = pygame.Rect(540, 540, button_width, button_height)
+        self.back_button = pygame.Rect(50, 50, 80, 30)
     
     def run(self) -> Dict:
         """
@@ -125,7 +131,7 @@ class LockUI:
             # 控制帧率
             self.clock.tick(Config.FPS)
         
-        # 清理pygame定时器
+        # 清除定时器，防止影响后续界面
         pygame.time.set_timer(pygame.USEREVENT + 1, 0)
         
         # 返回解谜结果
@@ -140,9 +146,7 @@ class LockUI:
         """
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                # 只退出解谜界面，不退出整个程序
                 self.running = False
-                self.result_message = "解谜取消"
             
             elif event.type == pygame.KEYDOWN:
                 self._handle_keydown(event.key)
@@ -168,6 +172,7 @@ class LockUI:
             key: 按下的键
         """
         if key == pygame.K_ESCAPE:
+            self.result_message = "解谜取消"
             self.running = False
         
         elif key == pygame.K_RETURN:
@@ -197,6 +202,10 @@ class LockUI:
         
         elif self.auto_solve_button.collidepoint(pos):
             self._auto_solve()
+        
+        elif self.back_button.collidepoint(pos):
+            self.result_message = "解谜取消"
+            self.running = False
     
     def _submit_answer(self):
         """
@@ -355,6 +364,13 @@ class LockUI:
         auto_text = self.small_font.render("AI解谜", True, Config.COLORS['WHITE'])
         auto_rect = auto_text.get_rect(center=self.auto_solve_button.center)
         self.screen.blit(auto_text, auto_rect)
+        
+        # 返回按钮
+        pygame.draw.rect(self.screen, Config.COLORS['GRAY'], self.back_button)
+        pygame.draw.rect(self.screen, Config.COLORS['BLACK'], self.back_button, 2)
+        back_text = self.small_font.render("返回", True, Config.COLORS['WHITE'])
+        back_rect = back_text.get_rect(center=self.back_button.center)
+        self.screen.blit(back_text, back_rect)
     
     def _render_result_message(self):
         """

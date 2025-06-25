@@ -208,16 +208,7 @@ class GameUI:
                     # 删除已拾取金币格子
                     pos = self.game_engine.player_pos
                     i, j = pos
-                    if self.game_engine.maze[i][j] == 'L':
-                        self.add_message("触发解谜挑战...")
-                        puzzle_result = self.game_engine.solve_puzzle()  # 调用解谜逻辑
-                        if puzzle_result:
-                            self.add_message("解谜成功！")
-                            self.game_engine.maze[i][j] = Config.PATH  # 转为空地
-                        else:
-                            self.add_message("解谜失败，返回原位置。")
-                            self.game_engine.player_pos = prev_pos  # 回退
-                            return  # 中断处理
+                    # 旧的L格处理逻辑已移除，现在使用interaction系统处理
                     # 检查是否触发陷阱
                     if self.game_engine.maze[i][j] == 'T':
                         self.add_message("⚠️ 你触发了一个陷阱！")
@@ -346,7 +337,7 @@ class GameUI:
         }
         
         # 创建并运行解谜界面
-        lock_ui = LockUI(self.game_engine, lock_data, self.screen)
+        lock_ui = LockUI(self.game_engine, lock_data)
         puzzle_result = lock_ui.run()
         
         # 处理解谜结果
@@ -458,6 +449,11 @@ class GameUI:
                 y = start_y + i * cell_size
                 
                 cell = maze[i][j]
+                
+                # 如果是已解决的谜题，显示为普通路径
+                if cell == Config.LOCKER and (i, j) in self.game_engine.solved_puzzles:
+                    cell = Config.PATH
+                
                 color = Config.ELEMENT_COLORS.get(cell, Config.COLORS['WHITE'])
                 
                 # 绘制格子
