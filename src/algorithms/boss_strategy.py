@@ -37,7 +37,7 @@ class BattleState:
     
     def is_valid(self) -> bool:
         """检查状态是否有效"""
-        return self.player_resources >= 0 and self.rounds_used >= 0
+        return self.rounds_used >= 0  # 移除资源检查，因为现在不消耗资源
 
 class BossStrategy:
     """
@@ -138,7 +138,7 @@ class BossStrategy:
         Returns:
             Tuple: 状态键
         """
-        return (state.boss_hp, state.player_resources, state.special_cooldown)
+        return (state.boss_hp, state.special_cooldown)
     
     def _should_prune(self, state: BattleState, max_rounds: int) -> bool:
         """
@@ -160,11 +160,7 @@ class BossStrategy:
             state.rounds_used >= len(self.best_solution)):
             return True
         
-        # 资源不足且无法仅用普通攻击获胜
-        normal_attack_damage = Config.SKILLS['normal_attack']['damage']
-        if (state.player_resources <= 0 and 
-            state.boss_hp > normal_attack_damage * (max_rounds - state.rounds_used)):
-            return True
+        # 移除资源不足的剪枝条件，因为现在不消耗资源
         
         # 乐观估计：即使每回合都用最高伤害也无法获胜
         max_damage_per_round = max(s['damage'] for s in Config.SKILLS.values() if 'damage' in s)
@@ -211,15 +207,11 @@ class BossStrategy:
         """
         skill = self.skills[skill_name]
         
-        # 检查资源
-        if state.player_resources < skill['cost']:
-            return False
-        
-        # 检查冷却
+        # 只检查冷却，不检查资源
         if skill_name == 'special_attack' and state.special_cooldown > 0:
             return False
         
-        if skill_name == 'buff' and state.special_cooldown > 0:  # buff也有冷却
+        if skill_name == 'heal' and state.special_cooldown > 0:  # 治疗也有冷却
             return False
         
         return True
@@ -237,15 +229,13 @@ class BossStrategy:
         """
         skill = self.skills[skill_name]
         
-        # 计算伤害（考虑增益效果）
+        # 计算伤害
         damage = skill.get('damage', 0)
-        if len(state.skill_sequence) > 0 and state.skill_sequence[-1] == 'buff':
-            damage += skill.get('damage_boost', 0)
         
-        # 创建新状态
+        # 创建新状态（不消耗资源）
         new_state = BattleState(
             boss_hp=max(0, state.boss_hp - damage),
-            player_resources=state.player_resources - skill['cost'],
+            player_resources=state.player_resources,  # 不消耗资源
             rounds_used=state.rounds_used + 1,
             special_cooldown=max(0, state.special_cooldown - 1),
             skill_sequence=state.skill_sequence + [skill_name]
@@ -254,12 +244,13 @@ class BossStrategy:
         # 设置技能冷却
         if skill_name == 'special_attack':
             new_state.special_cooldown = skill['cooldown']
-        elif skill_name == 'buff':
+        elif skill_name == 'heal':
             new_state.special_cooldown = skill['cooldown']
         
-        # 治疗效果（增加资源）
+        # 治疗效果（恢复生命值，这里可以扩展为恢复玩家血量）
         if skill_name == 'heal':
-            new_state.player_resources += skill.get('heal_amount', 0)
+            # 治疗技能的效果可以在这里定义，比如恢复玩家血量
+            pass
         
         return new_state
     
@@ -274,8 +265,9 @@ class BossStrategy:
             Dict: 战斗结果
         """
         boss_hp = self.initial_boss_hp
-        player_resources = self.initial_player_resources
+        player_resources = self.initial_player_resources  # 保留但不消耗
         special_cooldown = 0
+        heal_cooldown = 0
         battle_log = []
         
         for i, skill_name in enumerate(skill_sequence):
@@ -284,26 +276,30 @@ class BossStrategy:
             # 更新冷却
             if special_cooldown > 0:
                 special_cooldown -= 1
+            if heal_cooldown > 0:
+                heal_cooldown -= 1
 
-            # 检查是否可用
-            if player_resources < skill['cost']:
-                return {'success': False, 'reason': '资源不足', 'battle_log': battle_log}
+            # 只检查冷却，不检查资源
             if skill_name == 'special_attack' and special_cooldown > 0:
                 return {'success': False, 'reason': '技能冷却中', 'battle_log': battle_log}
+            if skill_name == 'heal' and heal_cooldown > 0:
+                return {'success': False, 'reason': '治疗冷却中', 'battle_log': battle_log}
 
-            # 使用技能
-            player_resources -= skill['cost']
+            # 使用技能（不消耗资源）
             boss_hp -= skill.get('damage', 0)
             if skill_name == 'special_attack':
                 special_cooldown = skill['cooldown']
+            elif skill_name == 'heal':
+                heal_cooldown = skill['cooldown']
             
             log_entry = {
                 'round': i + 1,
                 'skill': skill['name'],
                 'damage': skill.get('damage', 0),
                 'boss_hp': boss_hp,
-                'player_resources': player_resources,
-                'cooldown': special_cooldown
+                'player_resources': player_resources,  # 资源不变
+                'special_cooldown': special_cooldown,
+                'heal_cooldown': heal_cooldown
             }
             battle_log.append(log_entry)
             

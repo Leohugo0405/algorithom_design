@@ -51,6 +51,7 @@ class MultiMonsterBattleUI:
         self.show_strategy_result = False
         self.optimal_strategy = None
         self.strategy_stats = None
+        self.monster_targets = {}
         
         # UI布局
         self.player_area = pygame.Rect(50, 500, 300, 150)
@@ -187,23 +188,31 @@ class MultiMonsterBattleUI:
         if not self.battle.battle_active:
             return
         
-        # 计算当前最强怪物的血量作为BOSS血量
+        # 获取当前战斗状态
         battle_state = self.battle.get_battle_state()
         alive_monsters = [m for m in battle_state['monsters'] if m['alive']]
         if not alive_monsters:
             return
         
-        # 选择血量最高的怪物作为BOSS
-        boss_hp = max(m['current_hp'] for m in alive_monsters)
+        # 准备怪物信息
+        monsters_info = []
+        for monster in alive_monsters:
+            monsters_info.append({
+                'id': monster['id'],
+                'name': monster['name'],
+                'hp': monster['current_hp'],
+                'max_hp': monster['max_hp']
+            })
+        
         player_resources = battle_state['player_resources']
         
-        # 创建BossStrategy实例并寻找最优策略
-        boss_strategy = BossStrategy(boss_hp=boss_hp, player_resources=player_resources)
-        optimal_sequence, min_rounds, stats = boss_strategy.find_optimal_strategy(max_rounds=15)
+        # 创建多目标战斗策略并寻找最优策略
+        strategy_result = self._find_multi_target_strategy(monsters_info, player_resources)
         
         # 保存结果
-        self.optimal_strategy = optimal_sequence
-        self.strategy_stats = stats
+        self.optimal_strategy = strategy_result['sequence']
+        self.strategy_stats = strategy_result['stats']
+        self.monster_targets = strategy_result.get('targets', {})
         self.show_strategy_result = True
     
     def _close_strategy_result(self):
@@ -211,6 +220,100 @@ class MultiMonsterBattleUI:
         self.show_strategy_result = False
         self.optimal_strategy = None
         self.strategy_stats = None
+        self.monster_targets = {}
+    
+    def _find_multi_target_strategy(self, monsters_info: List[Dict], player_resources: int) -> Dict:
+        """寻找多目标战斗策略"""
+        # 按血量从低到高排序怪物（优先击败血量少的）
+        sorted_monsters = sorted(monsters_info, key=lambda m: m['hp'])
+        
+        strategy_sequence = []
+        target_assignments = {}
+        total_damage_needed = sum(m['hp'] for m in monsters_info)
+        current_resources = player_resources
+        
+        # 统计信息
+        nodes_explored = 0
+        
+        # 贪心策略：优先使用高效技能击败血量最少的怪物（不消耗资源）
+        remaining_monsters = sorted_monsters.copy()
+        step = 0
+        
+        while remaining_monsters and step < 20:
+            step += 1
+            nodes_explored += 1
+            
+            # 选择当前血量最少的怪物作为目标
+            target_monster = remaining_monsters[0]
+            
+            # 选择最适合的技能（不考虑资源）
+            best_skill = self._select_best_skill(target_monster['hp'])
+            if not best_skill:
+                break
+            
+            skill_info = Config.SKILLS[best_skill]
+            damage = skill_info.get('damage', 0)
+            
+            # 记录技能和目标
+            strategy_sequence.append(best_skill)
+            target_assignments[len(strategy_sequence) - 1] = {
+                'monster_id': target_monster['id'],
+                'monster_name': target_monster['name'],
+                'damage': damage,
+                'remaining_hp': max(0, target_monster['hp'] - damage)
+            }
+            
+            # 更新状态（不消耗资源）
+            target_monster['hp'] -= damage
+            
+            # 如果怪物被击败，从列表中移除
+            if target_monster['hp'] <= 0:
+                remaining_monsters.remove(target_monster)
+            else:
+                # 重新排序（血量可能发生变化）
+                remaining_monsters.sort(key=lambda m: m['hp'])
+        
+        # 计算成功率
+        success = len(remaining_monsters) == 0
+        
+        stats = {
+            'nodes_explored': nodes_explored,
+            'nodes_pruned': 0,
+            'states_cached': len(monsters_info),
+            'optimal_rounds': len(strategy_sequence),
+            'success': success,
+            'remaining_monsters': len(remaining_monsters)
+        }
+        
+        return {
+            'sequence': strategy_sequence if success else None,
+            'targets': target_assignments,
+            'stats': stats
+        }
+    
+    def _select_best_skill(self, target_hp: int, available_resources: int = None) -> Optional[str]:
+        """选择最适合的技能（不考虑资源消耗）"""
+        best_skill = None
+        best_damage = 0
+        
+        for skill_name, skill_info in Config.SKILLS.items():
+            damage = skill_info.get('damage', 0)
+            
+            # 跳过无伤害技能
+            if damage == 0:
+                continue
+            
+            # 如果能一击击败目标，优先选择伤害最高的
+            if damage >= target_hp:
+                if best_skill is None or damage > Config.SKILLS[best_skill].get('damage', 0):
+                    best_skill = skill_name
+                    best_damage = damage
+            # 否则选择伤害最高的技能
+            elif damage > best_damage:
+                best_skill = skill_name
+                best_damage = damage
+        
+        return best_skill
     
     def _update(self):
         """更新游戏状态"""
@@ -485,12 +588,24 @@ class MultiMonsterBattleUI:
             # 技能序列
             for i, skill_name in enumerate(self.optimal_strategy):
                 skill_info = Config.SKILLS[skill_name]
+                
+                # 基本技能信息
                 skill_text = f"{i+1}. {skill_info['name']} (伤害: {skill_info.get('damage', 0)}, 消耗: {skill_info['cost']})"
                 skill_surface = self.small_font.render(skill_text, True, Config.COLORS['WHITE'])
                 self.screen.blit(skill_surface, (result_rect.x + 40, result_rect.y + y_offset))
-                y_offset += 25
+                y_offset += 20
                 
-                if y_offset > result_rect.height - 100:  # 防止超出窗口
+                # 目标信息
+                if i in self.monster_targets:
+                    target_info = self.monster_targets[i]
+                    target_text = f"   → 攻击目标: {target_info['monster_name']} (ID: {target_info['monster_id']}) 剩余血量: {target_info['remaining_hp']}"
+                    target_surface = self.small_font.render(target_text, True, Config.COLORS['YELLOW'])
+                    self.screen.blit(target_surface, (result_rect.x + 40, result_rect.y + y_offset))
+                    y_offset += 20
+                else:
+                    y_offset += 5
+                
+                if y_offset > result_rect.height - 120:  # 防止超出窗口
                     break
         else:
             # 无解情况
@@ -509,7 +624,9 @@ class MultiMonsterBattleUI:
                 f"探索节点数: {self.strategy_stats['nodes_explored']}",
                 f"剪枝节点数: {self.strategy_stats['nodes_pruned']}",
                 f"缓存状态数: {self.strategy_stats['states_cached']}",
-                f"最优回合数: {self.strategy_stats['optimal_rounds']}"
+                f"最优回合数: {self.strategy_stats['optimal_rounds']}",
+                f"策略成功: {'是' if self.strategy_stats.get('success', False) else '否'}",
+                f"剩余怪物: {self.strategy_stats.get('remaining_monsters', 0)}只"
             ]
             
             for stat in stats_info:
