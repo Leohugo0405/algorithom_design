@@ -67,13 +67,13 @@ class Config:
     # 游戏参数
     PLAYER_VISION_RANGE = 3  # 玩家视野范围 (3x3)
     GOLD_VALUE = 5  # 金币价值
-    TRAP_DAMAGE = -3  # 陷阱伤害
+    TRAP_RESOURCE_COST = 10  # 陷阱消耗资源（不再影响血量）
     
     # BOSS战斗参数
     BOSS_HP = 50  # BOSS血量
-    BOSS_ATTACK_DAMAGE = 8  # BOSS攻击伤害
+    # 移除BOSS攻击伤害，因为不再考虑玩家血量
 
-    # 玩家技能参数
+    # 玩家技能参数（移除血量相关技能）
     SKILLS = {
         'normal_attack': {
             'name': '普通攻击',
@@ -82,16 +82,10 @@ class Config:
             'cooldown': 0
         },
         'special_attack': {
-            'name': '强力一击',
-            'damage': 12,
-            'cost': 10,
+            'name': '大招',
+            'damage': 10,
+            'cost': 0,  # 不消耗资源
             'cooldown': 2  # 冷却2个回合
-        },
-        'heal': {
-            'name': '治疗',
-            'heal_amount': 25,
-            'cost': 15,
-            'cooldown': 3
         }
     }
     

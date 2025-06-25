@@ -212,8 +212,8 @@ class GameUI:
                     if self.game_engine.maze[i][j] == 'T':
                         self.add_message("⚠️ 你触发了一个陷阱！")
                         self._play_trap_animation()  # 显示动画提示
-                        self.game_engine.player_hp -= 10  # 扣除生命值（可自定义）
-                        self.add_message("生命值 -10")
+                        # 陷阱现在只消耗资源，不再影响生命值
+                        self.add_message(f"资源 -{Config.TRAP_RESOURCE_COST}")
                         self.game_engine.maze[i][j] = Config.PATH  # 陷阱只触发一次，设为空地
 
                     if self.game_engine.maze[i][j] == 'E':
@@ -572,7 +572,7 @@ class GameUI:
         game_state = self.game_engine.get_game_state()
         
         # 面板背景
-        panel_height = 180
+        panel_height = 160
         pygame.draw.rect(self.screen, Config.COLORS['GRAY'], (x, y, 300, panel_height))
         pygame.draw.rect(self.screen, Config.COLORS['BLACK'], (x, y, 300, panel_height), 2)
         
@@ -580,12 +580,11 @@ class GameUI:
         title = self.font.render("游戏统计", True, Config.COLORS['WHITE'])
         self.screen.blit(title, (x + 10, y + 10))
         
-        # 统计信息
+        # 统计信息（移除生命值显示）
         stats_text = [
             f"位置: {game_state['player_pos']}",
             f"移动次数: {game_state['moves_count']}",
             f"资源: {game_state['player_resources']}",
-            f"生命值: {game_state['player_hp']}",
             f"收集价值: {game_state['total_value_collected']}",
             f"收集物品: {game_state['collected_items']}",
             f"解谜数: {game_state['solved_puzzles']}",

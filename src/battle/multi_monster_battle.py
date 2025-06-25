@@ -47,14 +47,12 @@ class MultiMonsterBattle:
     
     def __init__(self, monster_configs: List[Dict]):
         """
-        初始化多怪物战斗
+        初始化多怪物战斗（移除玩家血量）
         
         Args:
             monster_configs: 怪物配置列表
         """
         self.monsters: List[Monster] = []
-        self.player_hp = 100
-        self.player_max_hp = 100
         self.player_resources = 100
         self.skill_cooldowns = {skill: 0 for skill in Config.SKILLS.keys()}
         self.battle_log = []
@@ -84,10 +82,8 @@ class MultiMonsterBattle:
         return [monster for monster in self.monsters if monster.is_alive()]
     
     def get_battle_state(self) -> Dict:
-        """获取当前战斗状态"""
+        """获取当前战斗状态（移除玩家血量）"""
         return {
-            'player_hp': self.player_hp,
-            'player_max_hp': self.player_max_hp,
             'player_resources': self.player_resources,
             'monsters': [
                 {
@@ -152,7 +148,6 @@ class MultiMonsterBattle:
             'skill_used': skill_name,
             'skill_name': skill_info['name'],
             'damage_dealt': 0,
-            'heal_amount': 0,
             'target_monster': None,
             'monster_defeated': False
         }
@@ -188,55 +183,39 @@ class MultiMonsterBattle:
                 result['monster_defeated'] = True
                 self.add_log(f"{target.name}被击败了！")
         
-        # 处理治疗技能
-        if 'heal_amount' in skill_info:
-            heal_amount = skill_info['heal_amount']
-            old_hp = self.player_hp
-            self.player_hp = min(self.player_max_hp, self.player_hp + heal_amount)
-            actual_heal = self.player_hp - old_hp
-            result['heal_amount'] = actual_heal
-            self.add_log(f"你使用了{skill_info['name']}，恢复了{actual_heal}点生命值")
+        # 移除治疗技能处理，因为不再考虑玩家血量
         
-        # 检查胜利条件
-        if not self.get_alive_monsters():
+        # 检查胜利条件（只需检查怪物是否全部被击败）
+        alive_monsters = self.get_alive_monsters()
+        if not alive_monsters:
             self.battle_active = False
             result['battle_status'] = 'victory'
-            self.add_log("所有怪物都被击败了！战斗胜利！")
+            self.add_log("所有怪物都被击败了！你获得了胜利！")
             return result
         
         # 怪物回合
         monster_actions = self.execute_monster_turns()
         result['monster_actions'] = monster_actions
-        
-        # 检查失败条件
-        if self.player_hp <= 0:
-            self.battle_active = False
-            result['battle_status'] = 'defeat'
-            self.add_log("你被击败了！")
-        else:
-            result['battle_status'] = 'ongoing'
+        result['battle_status'] = 'ongoing'
         
         return result
     
     def execute_monster_turns(self) -> List[Dict]:
-        """执行所有怪物的回合"""
+        """执行所有怪物的回合（移除攻击玩家逻辑）"""
         monster_actions = []
         alive_monsters = self.get_alive_monsters()
         
         for monster in alive_monsters:
-            # 简单AI：直接攻击玩家
-            damage = monster.attack_damage
-            self.player_hp -= damage
-            
+            # 怪物不再攻击玩家，只是等待玩家攻击
             action = {
                 'monster_id': monster.id,
                 'monster_name': monster.name,
-                'action': 'attack',
-                'damage': damage
+                'action': 'wait',
+                'damage': 0
             }
             monster_actions.append(action)
             
-            self.add_log(f"{monster.name}攻击了你，造成{damage}点伤害")
+            self.add_log(f"{monster.name}正在等待你的攻击")
         
         return monster_actions
     

@@ -41,9 +41,8 @@ class GameEngine:
         self.puzzle_solver = PuzzleSolver()
         self.boss_strategy = None
         
-        # 游戏状态
+        # 游戏状态（移除玩家血量）
         self.player_resources = 100
-        self.player_hp = 100
         self.collected_items = set()
         self.solved_puzzles = set()
         self.defeated_bosses = set()
@@ -109,10 +108,9 @@ class GameEngine:
     
     def _reset_game_state(self):
         """
-        重置游戏状态
+        重置游戏状态（移除玩家血量）
         """
         self.player_resources = 100
-        self.player_hp = 100
         self.collected_items = set()
         self.solved_puzzles = set()
         self.defeated_bosses = set()
@@ -133,7 +131,6 @@ class GameEngine:
         return {
             'player_pos': self.player_pos,
             'player_resources': self.player_resources,
-            'player_hp': self.player_hp,
             'moves_count': self.moves_count,
             'total_value_collected': self.total_value_collected,
             'collected_items': len(self.collected_items),
@@ -220,13 +217,14 @@ class GameEngine:
             }
         
         elif cell == Config.TRAP:
-            self.player_hp += Config.TRAP_DAMAGE  # 陷阱造成伤害
-            self.total_value_collected += Config.TRAP_DAMAGE
+            # 陷阱只消耗资源，不影响血量
+            resource_cost = Config.TRAP_RESOURCE_COST
+            self.player_resources -= resource_cost
             self.collected_items.add((x, y))
             result = {
                 'type': 'trap',
-                'message': f'触发陷阱！损失{-Config.TRAP_DAMAGE}生命值',
-                'value_change': Config.TRAP_DAMAGE
+                'message': f'触发陷阱！消耗{resource_cost}资源',
+                'value_change': -resource_cost
             }
         
         elif cell == Config.LOCKER:

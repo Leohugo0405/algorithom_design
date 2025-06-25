@@ -13,7 +13,7 @@ from ..config import Config
 @dataclass
 class BattleState:
     """
-    战斗状态类
+    战斗状态类（移除玩家血量和治疗相关）
     """
     boss_hp: int  # BOSS当前血量
     player_resources: int  # 玩家剩余资源
@@ -28,7 +28,11 @@ class BattleState:
     def get_priority(self) -> float:
         """计算状态优先级（f(n) = g(n) + h(n)）"""
         g_n = self.rounds_used  # 已用回合数
-        h_n = max(0, self.boss_hp / Config.SKILLS['normal_attack']['damage'])  # 预估剩余回合数
+        # 启发式函数：考虑普通攻击和大招的平均伤害
+        normal_damage = Config.SKILLS['normal_attack']['damage']
+        special_damage = Config.SKILLS['special_attack']['damage']
+        avg_damage = (normal_damage + special_damage) / 2
+        h_n = max(0, self.boss_hp / avg_damage)  # 预估剩余回合数
         return g_n + h_n
     
     def is_victory(self) -> bool:
@@ -37,7 +41,7 @@ class BattleState:
     
     def is_valid(self) -> bool:
         """检查状态是否有效"""
-        return self.rounds_used >= 0  # 移除资源检查，因为现在不消耗资源
+        return self.rounds_used >= 0 and self.player_resources >= 0
 
 class BossStrategy:
     """
@@ -101,8 +105,18 @@ class BossStrategy:
             
             # 检查是否获胜
             if current_state.is_victory():
-                if (self.best_solution is None or 
-                    current_state.rounds_used < len(self.best_solution)):
+                is_better = False
+                if self.best_solution is None:
+                    is_better = True
+                else:
+                    # 比较回合数，选择最少回合数的方案
+                    current_rounds = current_state.rounds_used
+                    best_rounds = len(self.best_solution)
+                    
+                    if current_rounds < best_rounds:
+                        is_better = True
+                
+                if is_better:
                     self.best_solution = current_state.skill_sequence[:]
                 continue
             
@@ -160,8 +174,6 @@ class BossStrategy:
             state.rounds_used >= len(self.best_solution)):
             return True
         
-        # 移除资源不足的剪枝条件，因为现在不消耗资源
-        
         # 乐观估计：即使每回合都用最高伤害也无法获胜
         max_damage_per_round = max(s['damage'] for s in Config.SKILLS.values() if 'damage' in s)
         remaining_rounds = max_rounds - state.rounds_used
@@ -205,13 +217,8 @@ class BossStrategy:
         Returns:
             bool: 是否可用
         """
-        skill = self.skills[skill_name]
-        
         # 只检查冷却，不检查资源
         if skill_name == 'special_attack' and state.special_cooldown > 0:
-            return False
-        
-        if skill_name == 'heal' and state.special_cooldown > 0:  # 治疗也有冷却
             return False
         
         return True
@@ -244,15 +251,10 @@ class BossStrategy:
         # 设置技能冷却
         if skill_name == 'special_attack':
             new_state.special_cooldown = skill['cooldown']
-        elif skill_name == 'heal':
-            new_state.special_cooldown = skill['cooldown']
-        
-        # 治疗效果（恢复生命值，这里可以扩展为恢复玩家血量）
-        if skill_name == 'heal':
-            # 治疗技能的效果可以在这里定义，比如恢复玩家血量
-            pass
         
         return new_state
+    
+
     
     def simulate_battle(self, skill_sequence: List[str]) -> Dict:
         """
@@ -267,7 +269,6 @@ class BossStrategy:
         boss_hp = self.initial_boss_hp
         player_resources = self.initial_player_resources  # 保留但不消耗
         special_cooldown = 0
-        heal_cooldown = 0
         battle_log = []
         
         for i, skill_name in enumerate(skill_sequence):
@@ -276,21 +277,15 @@ class BossStrategy:
             # 更新冷却
             if special_cooldown > 0:
                 special_cooldown -= 1
-            if heal_cooldown > 0:
-                heal_cooldown -= 1
 
             # 只检查冷却，不检查资源
             if skill_name == 'special_attack' and special_cooldown > 0:
                 return {'success': False, 'reason': '技能冷却中', 'battle_log': battle_log}
-            if skill_name == 'heal' and heal_cooldown > 0:
-                return {'success': False, 'reason': '治疗冷却中', 'battle_log': battle_log}
 
             # 使用技能（不消耗资源）
             boss_hp -= skill.get('damage', 0)
             if skill_name == 'special_attack':
                 special_cooldown = skill['cooldown']
-            elif skill_name == 'heal':
-                heal_cooldown = skill['cooldown']
             
             log_entry = {
                 'round': i + 1,
@@ -298,8 +293,7 @@ class BossStrategy:
                 'damage': skill.get('damage', 0),
                 'boss_hp': boss_hp,
                 'player_resources': player_resources,  # 资源不变
-                'special_cooldown': special_cooldown,
-                'heal_cooldown': heal_cooldown
+                'special_cooldown': special_cooldown
             }
             battle_log.append(log_entry)
             
@@ -339,7 +333,7 @@ class BossStrategy:
         
         # 计算各种效率指标
         total_damage = sum(log['damage'] for log in simulation['battle_log'])
-        total_cost = sum(self.skills[skill]['cost'] for skill in skill_sequence)
+        # 移除资源消耗计算，因为技能不再消耗资源
         
         skill_usage = {}
         for skill in skill_sequence:
@@ -350,10 +344,8 @@ class BossStrategy:
             'valid': True,
             'rounds_used': simulation['rounds_used'],
             'total_damage': total_damage,
-            'total_cost': total_cost,
             'damage_per_round': total_damage / simulation['rounds_used'],
-            'cost_per_round': total_cost / simulation['rounds_used'],
-            'resource_efficiency': total_damage / max(1, total_cost),
+            'damage_efficiency': total_damage / simulation['rounds_used'],  # 伤害效率
             'skill_usage': skill_usage,
             'final_resources': simulation['final_resources'],
             'battle_log': simulation['battle_log']
@@ -386,9 +378,9 @@ class BossStrategy:
                 'all_results': results
             }
         
-        # 按回合数排序，回合数相同则按资源效率排序
+        # 按回合数排序，回合数相同则按伤害效率排序
         best_strategy = min(valid_results, 
-                          key=lambda x: (x['rounds_used'], -x['resource_efficiency']))
+                          key=lambda x: (x['rounds_used'], -x['damage_efficiency']))
         
         return {
             'best_strategy': best_strategy,
@@ -397,7 +389,7 @@ class BossStrategy:
                 'min_rounds': min(r['rounds_used'] for r in valid_results),
                 'max_rounds': max(r['rounds_used'] for r in valid_results),
                 'avg_rounds': sum(r['rounds_used'] for r in valid_results) / len(valid_results),
-                'best_efficiency': max(r['resource_efficiency'] for r in valid_results)
+                'best_efficiency': max(r['damage_efficiency'] for r in valid_results)
             }
         }
     
