@@ -218,6 +218,14 @@ class GameUI:
                             self.add_message("解谜失败，返回原位置。")
                             self.game_engine.player_pos = prev_pos  # 回退
                             return  # 中断处理
+                    # 检查是否触发陷阱
+                    if self.game_engine.maze[i][j] == 'T':
+                        self.add_message("⚠️ 你触发了一个陷阱！")
+                        self._play_trap_animation()  # 显示动画提示
+                        self.game_engine.player_hp -= 10  # 扣除生命值（可自定义）
+                        self.add_message("生命值 -10")
+                        self.game_engine.maze[i][j] = Config.PATH  # 陷阱只触发一次，设为空地
+
                     if self.game_engine.maze[i][j] == 'E':
                         self.add_message("🎉 恭喜！你已到达出口，游戏结束！")
                         self.game_completed = True  # ✅ 标记游戏结束
@@ -272,7 +280,19 @@ class GameUI:
         else:
             self.add_message(f"自动游戏错误: {result['message']}")
             self.auto_play = False
+    def _play_trap_animation(self):
     
+    #显示陷阱触发动画（例如红色闪烁）
+    
+        for _ in range(3):
+            self.screen.fill((255, 0, 0))  # 红色闪屏
+            pygame.display.flip()
+            pygame.time.delay(100)
+            
+            self._render()  # 恢复正常画面
+            pygame.display.flip()
+            pygame.time.delay(100)
+
     def _calculate_optimal_path(self):
         """
         计算并缓存最优路径
@@ -375,6 +395,10 @@ class GameUI:
 
         if status == 'victory':
             self.add_message(f"Boss战斗胜利！ {message}")
+            # ✅ 删除 Boss 格子
+            i, j = self.game_engine.player_pos
+            if self.game_engine.maze[i][j] == 'B':
+                self.game_engine.maze[i][j] = Config.PATH  # 将 Boss 格子变为空地
         elif status == 'defeat':
             self.add_message(f"Boss战斗失败: {message}")
         else:
