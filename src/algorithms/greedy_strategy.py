@@ -109,7 +109,7 @@ class GreedyStrategy:
         if cell == Config.GOLD:
             return Config.GOLD_VALUE
         elif cell == Config.TRAP:
-            return Config.TRAP_DAMAGE
+            return -Config.TRAP_RESOURCE_COST
         else:
             return 0
     
@@ -332,7 +332,7 @@ class GreedyStrategy:
                     all_value += Config.GOLD_VALUE
                 elif self.maze[i][j] == Config.TRAP:
                     all_resources += 1
-                    all_value += Config.TRAP_DAMAGE
+                    all_value -= Config.TRAP_RESOURCE_COST
         
         collected_count = len([s for s in steps if s.get('action') == 'move_to_resource'])
         
