@@ -58,6 +58,9 @@ class GameEngine:
         self.active_battle = None
         self.active_multi_battle = None  # 多怪物战斗
         
+        # 待交互状态
+        self.pending_interaction = None  # 存储待交互的特殊方格信息
+        
         # 游戏模式
         self.ai_mode = True  # AI自动游戏模式
         self.visualization_enabled = True
@@ -175,6 +178,9 @@ class GameEngine:
         if (0 <= new_x < self.maze_size and 0 <= new_y < self.maze_size and 
             self.maze[new_x][new_y] != Config.WALL):
             
+            # 清除之前位置的待交互状态
+            self.pending_interaction = None
+            
             self.player_pos = (new_x, new_y)
             self.moves_count += 1
             
@@ -230,14 +236,14 @@ class GameEngine:
         elif cell == Config.LOCKER:
             if (x, y) not in self.solved_puzzles:
                 puzzle = self.puzzle_solver.generate_password_puzzle()
-                self.active_puzzle = {
+                self.pending_interaction = {
                     'position': (x, y),
                     'puzzle': puzzle,
-                    'type': 'password'
+                    'type': 'puzzle'
                 }
                 result = {
-                    'type': 'puzzle',
-                    'message': '发现密码锁！需要解谜',
+                    'type': 'pending_puzzle',
+                    'message': '发现密码锁！按Enter键进行交互',
                     'puzzle': puzzle
                 }
         
@@ -247,12 +253,15 @@ class GameEngine:
                 scenarios = list(Config.MULTI_BATTLE_SCENARIOS.keys())
                 selected_scenario = random.choice(scenarios)
                 
-                # 开始多怪物战斗
-                self.start_multi_monster_battle(selected_scenario)
+                self.pending_interaction = {
+                    'position': (x, y),
+                    'type': 'multi_monster_battle',
+                    'scenario': selected_scenario
+                }
                 
                 result = {
-                    'type': 'multi_monster_battle',
-                    'message': f'遭遇怪物群！{Config.MULTI_BATTLE_SCENARIOS[selected_scenario]["name"]}',
+                    'type': 'pending_multi_monster_battle',
+                    'message': f'遭遇怪物群！{Config.MULTI_BATTLE_SCENARIOS[selected_scenario]["name"]} 按Enter键开始战斗',
                     'scenario': selected_scenario
                 }
         
@@ -264,6 +273,44 @@ class GameEngine:
             }
         
         return result
+    
+    def interact_with_special_cell(self) -> Dict:
+        """
+        与当前位置的特殊方格进行交互（按Enter键触发）
+        
+        Returns:
+            Dict: 交互结果
+        """
+        if not self.pending_interaction:
+            return {'success': False, 'message': '当前位置没有可交互的内容'}
+        
+        interaction = self.pending_interaction
+        self.pending_interaction = None  # 清除待交互状态
+        
+        if interaction['type'] == 'puzzle':
+            self.active_puzzle = {
+                'position': interaction['position'],
+                'puzzle': interaction['puzzle'],
+                'type': 'password'
+            }
+            return {
+                'success': True,
+                'type': 'puzzle',
+                'message': '进入解谜界面...',
+                'puzzle': interaction['puzzle']
+            }
+        
+        elif interaction['type'] == 'multi_monster_battle':
+            # 开始多怪物战斗
+            self.start_multi_monster_battle(interaction['scenario'])
+            return {
+                'success': True,
+                'type': 'multi_monster_battle',
+                'message': f'开始战斗！{Config.MULTI_BATTLE_SCENARIOS[interaction["scenario"]]["name"]}',
+                'scenario': interaction['scenario']
+            }
+        
+        return {'success': False, 'message': '未知的交互类型'}
     
     # 旧的Boss战斗系统方法 - 已被多怪物战斗系统替代
     # def get_battle_state(self) -> Optional[Dict]:

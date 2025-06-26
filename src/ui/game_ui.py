@@ -184,6 +184,20 @@ class GameUI:
             # 比较路径策略
             self._compare_path_strategies()
         
+        elif key == pygame.K_RETURN or key == pygame.K_KP_ENTER:
+            # Enter键交互
+            if self.game_engine.pending_interaction:
+                interaction_result = self.game_engine.interact_with_special_cell()
+                if interaction_result['success']:
+                    self.add_message(interaction_result['message'])
+                    # 处理不同类型的交互
+                    if interaction_result['type'] == 'puzzle':
+                        self._handle_lock_encounter(interaction_result)
+                    elif interaction_result['type'] == 'multi_monster_battle':
+                        self._handle_multi_monster_battle(interaction_result)
+                else:
+                    self.add_message(interaction_result['message'])
+        
         elif not self.auto_play and not self.paused and not self.game_completed:
 
             # 手动移动控制
@@ -223,14 +237,18 @@ class GameUI:
                     if self.game_engine.maze[i][j] == Config.GOLD:
                         self.game_engine.maze[i][j] = Config.PATH  # 将金币格子改为空白路径
 
-                    # 检查是否遇到多怪物战斗
-                    if interaction.get('type') == 'multi_monster_battle':
+                    # 检查是否遇到需要交互的特殊方格
+                    if interaction.get('type') == 'pending_multi_monster_battle':
+                        # 不立即处理，等待Enter键交互
+                        pass
+                    elif interaction.get('type') == 'pending_puzzle':
+                        # 不立即处理，等待Enter键交互
+                        pass
+                    # 保留旧的立即处理逻辑（如果有的话）
+                    elif interaction.get('type') == 'multi_monster_battle':
                         self._handle_multi_monster_battle(interaction)
-                    # 检查是否遇到Boss
                     elif interaction.get('type') == 'boss':
                         self._handle_boss_encounter(interaction)
-                    
-                    # 检查是否遇到密码锁
                     elif interaction.get('type') == 'puzzle':
                         self._handle_lock_encounter(interaction)
                 else:
@@ -556,6 +574,10 @@ class GameUI:
         if self.show_algorithm_info:
             panel_y = self._render_algorithm_panel(panel_x, panel_y)
         
+        # 交互提示面板
+        if self.game_engine.pending_interaction:
+            panel_y = self._render_interaction_panel(panel_x, panel_y)
+        
         # 消息面板
         self._render_messages_panel(panel_x, Config.WINDOW_HEIGHT - 200)
     
@@ -597,6 +619,39 @@ class GameUI:
         
         return y + panel_height + 10
     
+    def _render_interaction_panel(self, x: int, y: int) -> int:
+        """
+        渲染交互提示面板
+        
+        Args:
+            x, y: 面板位置
+        
+        Returns:
+            int: 下一个面板的y坐标
+        """
+        # 面板背景
+        panel_height = 80
+        pygame.draw.rect(self.screen, Config.COLORS['YELLOW'], (x, y, 300, panel_height))
+        pygame.draw.rect(self.screen, Config.COLORS['BLACK'], (x, y, 300, panel_height), 2)
+        
+        # 标题
+        title = self.font.render("可交互内容", True, Config.COLORS['BLACK'])
+        self.screen.blit(title, (x + 10, y + 10))
+        
+        # 交互提示
+        interaction = self.game_engine.pending_interaction
+        if interaction['type'] == 'puzzle':
+            hint_text = "密码锁 - 按Enter键解谜"
+        elif interaction['type'] == 'multi_monster_battle':
+            hint_text = "怪物群 - 按Enter键战斗"
+        else:
+            hint_text = "未知内容 - 按Enter键交互"
+        
+        hint_surface = self.small_font.render(hint_text, True, Config.COLORS['BLACK'])
+        self.screen.blit(hint_surface, (x + 10, y + 40))
+        
+        return y + panel_height + 10
+    
     def _render_controls_panel(self, x: int, y: int) -> int:
         """
         渲染控制帮助面板
@@ -619,6 +674,7 @@ class GameUI:
         # 控制说明
         controls_text = [
             "WASD/方向键: 移动",
+            "ENTER: 与特殊方格交互",
             "A: 自动游戏开/关",
             "O: 显示最优路径",
             "G: 显示贪心路径",
