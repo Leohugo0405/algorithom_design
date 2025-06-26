@@ -14,18 +14,6 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from src.game_engine import GameEngine
 from src.ui.game_ui import GameUI
 
-def show_main_menu():
-    """
-    显示主菜单
-    """
-    print("=== 算法驱动的迷宫探险游戏 ===")
-    print("1. 开始游戏")
-    print("2. 退出")
-    
-    choice = input("\n请选择 (1-2): ").strip()
-    return choice
-
-
 
 def main():
     """
