@@ -253,15 +253,19 @@ class PuzzleSolver:
         
         # 如果密码已完整，检查是否满足所有约束条件
         if len(current_password) == Config.LOCK_DIGITS:
-            if self._check_constraints(current_password, constraints):
-                # 如果提供了正确密码，必须与正确密码匹配
-                if correct_password is not None:
-                    if current_password == correct_password:
-                        return current_password[:]
-                    else:
-                        return None
-                else:
-                    return current_password[:]
+            # if self._check_constraints(current_password, constraints):
+            #     # 如果提供了正确密码，必须与正确密码匹配
+            #     if correct_password is not None:
+            #         if current_password == correct_password:
+            #             return current_password[:]
+            #         else:
+            #             return None
+            #     else:
+            #         return current_password[:]
+            if current_password == correct_password:
+                return current_password[:]
+            else:
+                return None
         
         # 尝试下一位数字
         digit_range = range(1, 10) if len(current_password) == 0 else range(0, 10)
