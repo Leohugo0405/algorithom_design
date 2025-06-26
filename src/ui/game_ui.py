@@ -145,10 +145,6 @@ class GameUI:
                 self.optimal_path = []
                 self.greedy_path = []
                 self.game_completed = False  # 重置游戏结束标志
-
-            
-
-        
         elif key == pygame.K_o:
             # 显示/隐藏最优路径
             self.show_optimal_path = not self.show_optimal_path
