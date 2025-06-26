@@ -19,7 +19,7 @@ class PuzzleSolver:
         初始化谜题解决器
         """
         self.attempt_count = 0
-        self.max_attempts = 1000  # 防止无限递归
+        self.max_attempts = 1005  # 防止无限递归
     
     def generate_password_puzzle(self) -> Dict:
         """
@@ -223,10 +223,11 @@ class PuzzleSolver:
         
         # 如果密码已完整，返回结果
         if len(current_password) == Config.LOCK_DIGITS:
-            return current_password[:]
+                return current_password[:]
         
         # 尝试下一位数字
         digit_range = range(1, 10) if len(current_password) == 0 else range(0, 10)
+        
         
         for digit in digit_range:
             # 剪枝：避免重复数字
@@ -264,174 +265,3 @@ class PuzzleSolver:
         except:
             # 如果约束检查出错（比如索引越界），返回True继续尝试
             return True
-    
-    def generate_sudoku_puzzle(self, size: int = 4) -> Dict:
-        """
-        生成简化的数独谜题（4x4）
-        
-        Args:
-            size: 数独大小
-        
-        Returns:
-            Dict: 数独谜题
-        """
-        # 生成完整的数独解
-        solution = self._generate_sudoku_solution(size)
-        
-        # 移除一些数字创建谜题
-        puzzle = [row[:] for row in solution]
-        remove_count = size * size // 2
-        
-        positions = [(i, j) for i in range(size) for j in range(size)]
-        random.shuffle(positions)
-        
-        for i in range(remove_count):
-            x, y = positions[i]
-            puzzle[x][y] = 0
-        
-        return {
-            'puzzle': puzzle,
-            'solution': solution,
-            'size': size,
-            'description': f'填入1-{size}的数字，使每行每列都不重复'
-        }
-    
-    def _generate_sudoku_solution(self, size: int) -> List[List[int]]:
-        """
-        生成数独解
-        
-        Args:
-            size: 数独大小
-        
-        Returns:
-            List[List[int]]: 数独解
-        """
-        grid = [[0 for _ in range(size)] for _ in range(size)]
-        
-        def is_valid(grid, row, col, num):
-            # 检查行
-            for j in range(size):
-                if grid[row][j] == num:
-                    return False
-            
-            # 检查列
-            for i in range(size):
-                if grid[i][col] == num:
-                    return False
-            
-            return True
-        
-        def solve_sudoku(grid):
-            for i in range(size):
-                for j in range(size):
-                    if grid[i][j] == 0:
-                        numbers = list(range(1, size + 1))
-                        random.shuffle(numbers)
-                        
-                        for num in numbers:
-                            if is_valid(grid, i, j, num):
-                                grid[i][j] = num
-                                
-                                if solve_sudoku(grid):
-                                    return True
-                                
-                                grid[i][j] = 0
-                        
-                        return False
-            return True
-        
-        solve_sudoku(grid)
-        return grid
-    
-    def solve_sudoku_puzzle(self, puzzle: List[List[int]]) -> Tuple[Optional[List[List[int]]], int]:
-        """
-        使用回溯法解决数独谜题
-        
-        Args:
-            puzzle: 数独谜题
-        
-        Returns:
-            Tuple[Optional[List[List[int]]], int]: (解答, 尝试次数)
-        """
-        self.attempt_count = 0
-        size = len(puzzle)
-        solution = [row[:] for row in puzzle]
-        
-        def is_valid(grid, row, col, num):
-            # 检查行
-            for j in range(size):
-                if grid[row][j] == num:
-                    return False
-            
-            # 检查列
-            for i in range(size):
-                if grid[i][col] == num:
-                    return False
-            
-            return True
-        
-        def backtrack_sudoku(grid):
-            self.attempt_count += 1
-            
-            if self.attempt_count > self.max_attempts:
-                return False
-            
-            for i in range(size):
-                for j in range(size):
-                    if grid[i][j] == 0:
-                        for num in range(1, size + 1):
-                            if is_valid(grid, i, j, num):
-                                grid[i][j] = num
-                                
-                                if backtrack_sudoku(grid):
-                                    return True
-                                
-                                grid[i][j] = 0
-                        
-                        return False
-            return True
-        
-        success = backtrack_sudoku(solution)
-        return solution if success else None, self.attempt_count
-    
-    def analyze_puzzle_complexity(self, puzzle_type: str, puzzle_data: Dict) -> Dict:
-        """
-        分析谜题复杂度
-        
-        Args:
-            puzzle_type: 谜题类型
-            puzzle_data: 谜题数据
-        
-        Returns:
-            Dict: 复杂度分析
-        """
-        if puzzle_type == 'password':
-            solution, attempts = self.solve_password_puzzle(puzzle_data['clues'])
-            
-            return {
-                'puzzle_type': puzzle_type,
-                'solvable': solution is not None,
-                'attempts_needed': attempts,
-                'clue_count': len(puzzle_data['clues']),
-                'complexity_score': attempts / 100.0,  # 归一化复杂度
-                'solution': solution
-            }
-        
-        elif puzzle_type == 'sudoku':
-            solution, attempts = self.solve_sudoku_puzzle(puzzle_data['puzzle'])
-            
-            # 计算空格数量
-            empty_cells = sum(row.count(0) for row in puzzle_data['puzzle'])
-            total_cells = len(puzzle_data['puzzle']) ** 2
-            
-            return {
-                'puzzle_type': puzzle_type,
-                'solvable': solution is not None,
-                'attempts_needed': attempts,
-                'empty_cells': empty_cells,
-                'fill_rate': (total_cells - empty_cells) / total_cells,
-                'complexity_score': attempts / 500.0,  # 归一化复杂度
-                'solution': solution
-            }
-        
-        return {'error': 'Unknown puzzle type'}
