@@ -266,6 +266,9 @@ class MultiMonsterBattleUI:
         target_assignments = {}
         
         if optimal_sequence:
+            # 模拟技能序列执行，计算每步后的怪物血量
+            current_monster_hps = [m['hp'] for m in monsters_info]
+            
             for i, (skill_name, target_id) in enumerate(optimal_sequence):
                 strategy_sequence.append(skill_name)
                 
@@ -273,11 +276,21 @@ class MultiMonsterBattleUI:
                     skill_info = Config.SKILLS[skill_name]
                     damage = skill_info.get('damage', 0)
                     
+                    # 计算技能执行前的血量
+                    hp_before = current_monster_hps[target_id]
+                    
+                    # 应用伤害
+                    if 'damage' in skill_info:
+                        current_monster_hps[target_id] = max(0, current_monster_hps[target_id] - damage)
+                    
+                    # 计算技能执行后的血量
+                    hp_after = current_monster_hps[target_id]
+                    
                     target_assignments[i] = {
                         'monster_id': target_id,
                         'monster_name': monsters_info[target_id]['name'],
                         'damage': damage,
-                        'remaining_hp': 'calculated'  # 实际计算需要模拟整个序列
+                        'remaining_hp': hp_after
                     }
                 else:
                     # 非攻击技能（如治疗）
