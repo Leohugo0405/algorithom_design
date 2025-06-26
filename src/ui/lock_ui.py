@@ -251,6 +251,15 @@ class LockUI:
             self.result_message = f"AI解谜失败，尝试了{attempts}次"
             self.show_result = True
             self.result_start_time = pygame.time.get_ticks()
+        
+        # correct_password = self.lock_data['puzzle']['password']
+        # self.puzzle_solved = True
+        # self.result_message = f"AI解谜成功！密码是{correct_password[0]}{correct_password[1]}{correct_password[2]}"
+        # self.show_result = True
+        # self.result_start_time = pygame.time.get_ticks()
+        # # 延迟3秒后退出
+        # pygame.time.set_timer(pygame.USEREVENT + 1, 3000)
+
     
     def _render(self):
         """
