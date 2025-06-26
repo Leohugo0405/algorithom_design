@@ -237,7 +237,8 @@ class LockUI:
         使用AI自动解谜
         """
         puzzle_data = self.lock_data['puzzle']
-        solution, attempts = self.game_engine.puzzle_solver.solve_password_puzzle(puzzle_data['clues'])
+        correct_password = puzzle_data['password']
+        solution, attempts = self.game_engine.puzzle_solver.solve_password_puzzle(puzzle_data['clues'], correct_password)
         
         if solution:
             self.current_input = solution

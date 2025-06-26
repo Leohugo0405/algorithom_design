@@ -124,12 +124,13 @@ class PuzzleSolver:
                 return False
         return True
     
-    def solve_password_puzzle(self, clues: List[str]) -> Tuple[Optional[List[int]], int]:
+    def solve_password_puzzle(self, clues: List[str], correct_password: Optional[List[int]] = None) -> Tuple[Optional[List[int]], int]:
         """
         使用回溯法解决密码谜题
         
         Args:
             clues: 线索列表
+            correct_password: 正确的密码（可选）
         
         Returns:
             Tuple[Optional[List[int]], int]: (解答, 尝试次数)
@@ -140,7 +141,7 @@ class PuzzleSolver:
         constraints = self._parse_clues(clues)
         
         # 使用回溯法求解
-        solution = self._backtrack_solve([], constraints)
+        solution = self._backtrack_solve([], constraints, correct_password)
         
         return solution, self.attempt_count
     
@@ -158,56 +159,85 @@ class PuzzleSolver:
         
         for clue in clues:
             if "3个不同的数字" in clue:
-                constraints.append(lambda pwd: len(set(pwd)) == 3)
+                def unique_digits(pwd):
+                    return len(pwd) == 0 or len(set(pwd)) == len(pwd)
+                constraints.append(unique_digits)
             
             elif "第一位数字不为0" in clue:
-                constraints.append(lambda pwd: len(pwd) > 0 and pwd[0] != 0)
+                def first_not_zero(pwd):
+                    return len(pwd) == 0 or pwd[0] != 0
+                constraints.append(first_not_zero)
             
             elif "第一位数字是质数" in clue:
-                constraints.append(lambda pwd: len(pwd) > 0 and self._is_prime(pwd[0]))
+                def first_is_prime(pwd):
+                    return len(pwd) == 0 or self._is_prime(pwd[0])
+                constraints.append(first_is_prime)
             
             elif "第一位数字是合数" in clue:
-                constraints.append(lambda pwd: len(pwd) > 0 and not self._is_prime(pwd[0]) and pwd[0] > 1)
+                def first_is_composite(pwd):
+                    return len(pwd) == 0 or (not self._is_prime(pwd[0]) and pwd[0] > 1)
+                constraints.append(first_is_composite)
             
             elif "第二位数字是偶数" in clue:
-                constraints.append(lambda pwd: len(pwd) > 1 and pwd[1] % 2 == 0)
+                def second_is_even(pwd):
+                    return len(pwd) <= 1 or pwd[1] % 2 == 0
+                constraints.append(second_is_even)
             
             elif "第二位数字是奇数" in clue:
-                constraints.append(lambda pwd: len(pwd) > 1 and pwd[1] % 2 == 1)
+                def second_is_odd(pwd):
+                    return len(pwd) <= 1 or pwd[1] % 2 == 1
+                constraints.append(second_is_odd)
             
             elif "第一位数字大于第二位数字" in clue:
-                constraints.append(lambda pwd: len(pwd) > 1 and pwd[0] > pwd[1])
+                def first_greater_than_second(pwd):
+                    return len(pwd) <= 1 or pwd[0] > pwd[1]
+                constraints.append(first_greater_than_second)
             
             elif "第一位数字小于第二位数字" in clue:
-                constraints.append(lambda pwd: len(pwd) > 1 and pwd[0] < pwd[1])
+                def first_less_than_second(pwd):
+                    return len(pwd) <= 1 or pwd[0] < pwd[1]
+                constraints.append(first_less_than_second)
             
             elif "第三位数字大于第二位数字" in clue:
-                constraints.append(lambda pwd: len(pwd) > 2 and pwd[2] > pwd[1])
+                def third_greater_than_second(pwd):
+                    return len(pwd) <= 2 or pwd[2] > pwd[1]
+                constraints.append(third_greater_than_second)
             
             elif "第三位数字小于第二位数字" in clue:
-                constraints.append(lambda pwd: len(pwd) > 2 and pwd[2] < pwd[1])
+                def third_less_than_second(pwd):
+                    return len(pwd) <= 2 or pwd[2] < pwd[1]
+                constraints.append(third_less_than_second)
             
             elif "三个数字的和是偶数" in clue:
-                constraints.append(lambda pwd: len(pwd) == 3 and sum(pwd) % 2 == 0)
+                def sum_is_even(pwd):
+                    return len(pwd) != 3 or sum(pwd) % 2 == 0
+                constraints.append(sum_is_even)
             
             elif "三个数字的和是奇数" in clue:
-                constraints.append(lambda pwd: len(pwd) == 3 and sum(pwd) % 2 == 1)
+                def sum_is_odd(pwd):
+                    return len(pwd) != 3 or sum(pwd) % 2 == 1
+                constraints.append(sum_is_odd)
             
             elif "三个数字的和大于15" in clue:
-                constraints.append(lambda pwd: len(pwd) == 3 and sum(pwd) > 15)
+                def sum_greater_than_15(pwd):
+                    return len(pwd) != 3 or sum(pwd) > 15
+                constraints.append(sum_greater_than_15)
             
             elif "三个数字的和不大于15" in clue:
-                constraints.append(lambda pwd: len(pwd) == 3 and sum(pwd) <= 15)
+                def sum_not_greater_than_15(pwd):
+                    return len(pwd) != 3 or sum(pwd) <= 15
+                constraints.append(sum_not_greater_than_15)
         
         return constraints
     
-    def _backtrack_solve(self, current_password: List[int], constraints: List[Callable]) -> Optional[List[int]]:
+    def _backtrack_solve(self, current_password: List[int], constraints: List[Callable], correct_password: Optional[List[int]] = None) -> Optional[List[int]]:
         """
         回溯法求解密码
         
         Args:
             current_password: 当前部分密码
             constraints: 约束条件列表
+            correct_password: 正确的密码（可选）
         
         Returns:
             Optional[List[int]]: 完整密码或None
@@ -221,9 +251,17 @@ class PuzzleSolver:
         if not self._check_constraints(current_password, constraints):
             return None
         
-        # 如果密码已完整，返回结果
+        # 如果密码已完整，检查是否满足所有约束条件
         if len(current_password) == Config.LOCK_DIGITS:
-                return current_password[:]
+            if self._check_constraints(current_password, constraints):
+                # 如果提供了正确密码，必须与正确密码匹配
+                if correct_password is not None:
+                    if current_password == correct_password:
+                        return current_password[:]
+                    else:
+                        return None
+                else:
+                    return current_password[:]
         
         # 尝试下一位数字
         digit_range = range(1, 10) if len(current_password) == 0 else range(0, 10)
@@ -236,7 +274,7 @@ class PuzzleSolver:
             
             # 添加数字并递归
             current_password.append(digit)
-            result = self._backtrack_solve(current_password, constraints)
+            result = self._backtrack_solve(current_password, constraints, correct_password)
             
             if result is not None:
                 return result
