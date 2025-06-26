@@ -725,65 +725,11 @@ class GameEngine:
             'comparison': comparison
         }
     
-    def auto_play_step(self) -> Dict:
-        """
-        AI自动游戏一步
-        
-        Returns:
-            Dict: 自动游戏步骤结果
-        """
-        if not self.ai_mode:
-            return {'success': False, 'message': 'AI模式未启用'}
-        
-        # 处理活跃的谜题或战斗
-        if self.active_puzzle:
-            return self.solve_puzzle('auto')
-        
-        if self.active_battle:
-            return self.fight_boss('optimal')
-        
-        # 如果到达终点，游戏结束
-        if self.player_pos == self.exit_pos:
-            return {
-                'success': True,
-                'message': '游戏完成！',
-                'game_completed': True,
-                'final_stats': self.get_game_statistics()
-            }
-        
-        # 使用贪心策略选择下一步移动
-        visible_resources = self.greedy_strategy.get_resources_in_vision(self.player_pos)
-        
-        if visible_resources:
-            # 有可见资源，移动到最佳资源
-            best_resource = self.greedy_strategy.find_best_resource(self.player_pos)
-            if best_resource:
-                target_pos = best_resource['position']
-                path = self.greedy_strategy.find_path_to_resource(self.player_pos, target_pos)
-                
-                if len(path) > 1:
-                    next_pos = path[1]  # 下一步位置
-                    direction = self._get_direction(self.player_pos, next_pos)
-                    return self.move_player(direction)
-        
-        # 没有可见资源，朝终点移动
-        if self.exit_pos:
-            path = self.greedy_strategy.find_path_to_resource(self.player_pos, self.exit_pos)
-            if len(path) > 1:
-                next_pos = path[1]
-                direction = self._get_direction(self.player_pos, next_pos)
-                return self.move_player(direction)
-        
-        # 随机移动
-        directions = ['up', 'down', 'left', 'right']
-        random.shuffle(directions)
-        
-        for direction in directions:
-            result = self.move_player(direction)
-            if result['success']:
-                return result
-        
-        return {'success': False, 'message': '无法移动'}
+
+    
+
+    
+
     
     def _get_direction(self, from_pos: Tuple[int, int], to_pos: Tuple[int, int]) -> str:
         """
@@ -834,7 +780,6 @@ class GameEngine:
                 'final_position': self.player_pos,
                 'moves_count': self.moves_count,
                 'final_resources': self.player_resources,
-                'final_hp': self.player_hp,
                 'total_value_collected': self.total_value_collected
             },
             'collection_stats': {
@@ -850,6 +795,8 @@ class GameEngine:
                 'resource_efficiency': self.total_value_collected / 100.0  # 相对于初始资源
             }
         }
+    
+
     
     def save_game_state(self, filename: str) -> Dict:
         """

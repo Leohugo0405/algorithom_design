@@ -58,76 +58,152 @@ class PathPlanner:
         if cell == Config.GOLD:
             return Config.GOLD_VALUE
         elif cell == Config.TRAP:
-            return Config.TRAP_DAMAGE
+            return -Config.TRAP_RESOURCE_COST
         elif cell in [Config.PATH, Config.START, Config.EXIT, Config.LOCKER, Config.BOSS]:
             return 0
         else:  # 墙壁
             return -float('inf')
     
-    def find_optimal_path(self) -> Tuple[int, List[Tuple[int, int]]]:
+    def find_optimal_path(self, custom_start: Optional[Tuple[int, int]] = None) -> Tuple[int, List[Tuple[int, int]]]:
         """
         使用动态规划找到最优路径
+        
+        Args:
+            custom_start: 自定义起点位置，如果为None则使用默认起点
         
         Returns:
             Tuple[int, List[Tuple[int, int]]]: (最大资源值, 最优路径)
         """
-        if not self.start_pos or not self.exit_pos:
+        # 使用自定义起点或默认起点
+        start_pos = custom_start if custom_start else self.start_pos
+        
+        if not start_pos or not self.exit_pos:
             return 0, []
         
+        # 重新初始化DP表
+        self.dp = [[-float('inf') for _ in range(self.size)] for _ in range(self.size)]
+        self.parent = [[None for _ in range(self.size)] for _ in range(self.size)]
+        
         # 初始化起点
-        start_x, start_y = self.start_pos
+        start_x, start_y = start_pos
         self.dp[start_x][start_y] = self._get_cell_value(start_x, start_y)
         
         # 动态规划填表
-        self._fill_dp_table()
+        self._fill_dp_table_from_start(start_pos)
         
         # 回溯构建最优路径
         max_value = self.dp[self.exit_pos[0]][self.exit_pos[1]]
-        optimal_path = self._reconstruct_path()
+        optimal_path = self._reconstruct_path_to_exit()
         
         return max_value, optimal_path
     
     def _fill_dp_table(self):
         """
-        使用动态规划填充DP表
+        使用动态规划填充DP表（使用默认起点）
         采用拓扑排序的思想，按照从起点到终点的顺序更新
         """
-        # 使用队列进行BFS式的DP更新
-        from collections import deque
+        self._fill_dp_table_from_start(self.start_pos)
+    
+    def _fill_dp_table_from_start(self, start_pos: Tuple[int, int]):
+        """
+        从指定起点使用动态规划填充DP表
+        按照用户提供的DP模式：三层嵌套循环结构
         
-        queue = deque([self.start_pos])
-        visited = set([self.start_pos])
+        Args:
+            start_pos: 起点位置
+        """
+        # 构建图结构：graph[period][current_pos][prev_pos] = transition_cost
+        graph = self._build_graph_structure()
         
-        while queue:
-            x, y = queue.popleft()
-            current_value = self.dp[x][y]
-            
-            # 四个方向
-            directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
-            
-            for dx, dy in directions:
-                nx, ny = x + dx, y + dy
-                
-                # 检查边界和墙壁
-                if (0 <= nx < self.size and 0 <= ny < self.size and 
-                    self.maze[nx][ny] != Config.WALL):
+        # 初始化costs字典：costs[pos] = 到达该位置的最大价值
+        costs = {}
+        parents = {}
+        
+        # 初始化所有可达位置的costs为负无穷
+        for i in range(self.size):
+            for j in range(self.size):
+                if self.maze[i][j] != Config.WALL:
+                    costs[(i, j)] = -float('inf')
+                    parents[(i, j)] = None
+        
+        # 设置起点的初始值
+        costs[start_pos] = self._get_cell_value(start_pos[0], start_pos[1])
+        
+        # 按照用户提供的DP模式进行三层嵌套循环
+        for period_key in graph.keys():
+            for key_i in graph[period_key].keys():
+                for key_i_cost in graph[period_key][key_i].keys():
+                    # 如果通过key_i_cost到达key_i的路径更优，则更新
+                    transition_value = graph[period_key][key_i][key_i_cost]
+                    new_cost = costs[key_i_cost] + transition_value
                     
-                    # 计算到达(nx, ny)的价值
-                    new_value = current_value + self._get_cell_value(nx, ny)
-                    
-                    # 如果找到更好的路径，更新DP表
-                    if new_value > self.dp[nx][ny]:
-                        self.dp[nx][ny] = new_value
-                        self.parent[nx][ny] = (x, y)
+                    if new_cost > costs[key_i]:
+                        costs[key_i] = new_cost
+                        parents[key_i] = key_i_cost
+        
+        # 将结果更新到DP表中
+        for pos, cost in costs.items():
+            self.dp[pos[0]][pos[1]] = cost
+            self.parent[pos[0]][pos[1]] = parents[pos]
+    
+    def _build_graph_structure(self):
+        """
+        构建图结构用于DP算法
+        返回格式：graph[period][current_pos][prev_pos] = transition_cost
+        """
+        graph = {}
+        
+        # 计算曼哈顿距离作为period（阶段）
+        max_distance = (self.size - 1) * 2
+        
+        for period in range(max_distance + 1):
+            graph[period] = {}
+            
+            # 遍历所有可能的当前位置
+            for i in range(self.size):
+                for j in range(self.size):
+                    if self.maze[i][j] != Config.WALL:
+                        current_pos = (i, j)
                         
-                        # 如果这个位置还没有被访问过，加入队列
-                        if (nx, ny) not in visited:
-                            queue.append((nx, ny))
-                            visited.add((nx, ny))
+                        # 计算当前位置到起点的曼哈顿距离
+                        if hasattr(self, 'start_pos') and self.start_pos:
+                            manhattan_dist = abs(i - self.start_pos[0]) + abs(j - self.start_pos[1])
+                        else:
+                            manhattan_dist = i + j  # 默认起点为(0,0)
+                        
+                        # 只处理当前阶段的位置
+                        if manhattan_dist == period:
+                            graph[period][current_pos] = {}
+                            
+                            # 四个方向的前驱位置
+                            directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
+                            
+                            for dx, dy in directions:
+                                prev_x, prev_y = i - dx, j - dy
+                                
+                                # 检查前驱位置的有效性
+                                if (0 <= prev_x < self.size and 0 <= prev_y < self.size and 
+                                    self.maze[prev_x][prev_y] != Config.WALL):
+                                    
+                                    prev_pos = (prev_x, prev_y)
+                                    # 转移代价是当前位置的价值
+                                    transition_cost = self._get_cell_value(i, j)
+                                    graph[period][current_pos][prev_pos] = transition_cost
+        
+        return graph
     
     def _reconstruct_path(self) -> List[Tuple[int, int]]:
         """
-        从终点回溯构建最优路径
+        从终点回溯构建最优路径（使用默认终点）
+        
+        Returns:
+            List[Tuple[int, int]]: 最优路径坐标列表
+        """
+        return self._reconstruct_path_to_exit()
+    
+    def _reconstruct_path_to_exit(self) -> List[Tuple[int, int]]:
+        """
+        从终点回溯构建到出口的最优路径
         
         Returns:
             List[Tuple[int, int]]: 最优路径坐标列表
@@ -137,9 +213,16 @@ class PathPlanner:
         
         path = []
         current = self.exit_pos
+        visited_in_path = set()  # 防止循环
+        max_path_length = self.size * self.size  # 最大路径长度限制
         
-        while current is not None:
+        while current is not None and len(path) < max_path_length:
+            if current in visited_in_path:
+                # 检测到循环，停止重构
+                break
+            
             path.append(current)
+            visited_in_path.add(current)
             current = self.parent[current[0]][current[1]]
         
         path.reverse()

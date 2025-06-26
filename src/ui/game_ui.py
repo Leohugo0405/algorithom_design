@@ -8,6 +8,7 @@
 import pygame
 import sys
 from typing import Dict, List, Tuple, Optional
+from src import config
 from src.config import Config
 from src.game_engine import GameEngine
 from src.ui.lock_ui import LockUI
@@ -35,15 +36,14 @@ class GameUI:
         self.paused = False
         self.show_optimal_path = False
         self.show_greedy_path = False
-        self.auto_play = False
-        self.auto_play_speed = 500  # 毫秒
-        self.last_auto_step = 0
+
         self.game_completed = False  # 游戏是否已结束
 
         # 显示面板
         self.show_statistics = True
         self.show_controls = True
         self.show_algorithm_info = False
+
         
         # 路径显示
         self.optimal_path = []
@@ -97,11 +97,7 @@ class GameUI:
             # 处理事件
             self._handle_events()
             
-            # 自动游戏逻辑
-            if self.auto_play and not self.paused:
-                if current_time - self.last_auto_step > self.auto_play_speed:
-                    self._auto_play_step()
-                    self.last_auto_step = current_time
+
             
             # 渲染游戏
             self._render()
@@ -124,6 +120,8 @@ class GameUI:
             
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 self._handle_mouse_click(event.pos)
+            else:
+                pass
     
     def _handle_keydown(self, key):
         """
@@ -149,10 +147,7 @@ class GameUI:
                 self.game_completed = False  # 重置游戏结束标志
 
             
-        elif key == pygame.K_a:
-            # 切换自动游戏
-            self.auto_play = not self.auto_play
-            self.add_message("自动游戏开启" if self.auto_play else "自动游戏关闭")
+
         
         elif key == pygame.K_o:
             # 显示/隐藏最优路径
@@ -180,6 +175,8 @@ class GameUI:
             # 切换算法信息显示
             self.show_algorithm_info = not self.show_algorithm_info
         
+
+        
         elif key == pygame.K_c:
             # 比较路径策略
             self._compare_path_strategies()
@@ -198,15 +195,14 @@ class GameUI:
                 else:
                     self.add_message(interaction_result['message'])
         
-        elif not self.auto_play and not self.paused and not self.game_completed:
-
+        elif not self.paused and not self.game_completed:
             # 手动移动控制
             direction = None
             if key == pygame.K_UP or key == pygame.K_w:
                 direction = 'up'
             elif key == pygame.K_DOWN or key == pygame.K_s:
                 direction = 'down'
-            elif key == pygame.K_LEFT or key == pygame.K_a:
+            elif key == pygame.K_LEFT:
                 direction = 'left'
             elif key == pygame.K_RIGHT or key == pygame.K_d:
                 direction = 'right'
@@ -253,6 +249,9 @@ class GameUI:
                         self._handle_lock_encounter(interaction)
                 else:
                     self.add_message(result['message'])
+        else:
+            # 处理未定义的按键，防止程序无响应
+            pass
     
     def _handle_mouse_click(self, pos: Tuple[int, int]):
         """
@@ -264,56 +263,13 @@ class GameUI:
         # 可以添加鼠标交互逻辑，比如点击迷宫格子
         pass
     
-    def _auto_play_step(self):
-        """
-        执行自动游戏一步
-        """
-        # AI遇到多怪物战斗时，直接在引擎层面解决战斗，不打开UI
-        game_state = self.game_engine.get_game_state()
-        if game_state.get('active_multi_battle'):
-            self.add_message("AI遇到怪物群，自动战斗...")
-            # AI使用简单策略：优先攻击血量最少的怪物
-            while self.game_engine.active_multi_battle and not self.game_engine.active_multi_battle.is_battle_over():
-                battle_state = self.game_engine.get_multi_battle_state()
-                if not battle_state['alive_monsters']:
-                    break
-                    
-                # 选择普通攻击和血量最少的怪物
-                target_suggestion = self.game_engine.get_multi_battle_target_suggestion('normal_attack')
-                if target_suggestion:
-                    result = self.game_engine.execute_multi_battle_turn('normal_attack', target_suggestion)
-                    if result.get('battle_over'):
-                        break
-                else:
-                    break
-            
-            # 获取战斗结果
-            if self.game_engine.active_multi_battle:
-                battle_result = self.game_engine.active_multi_battle.get_battle_result()
-                if battle_result['status'] == 'victory':
-                    self.add_message(f"AI战斗胜利: {battle_result['message']}")
-                else:
-                    self.add_message(f"AI战斗失败: {battle_result['message']}")
-            return # 当前步骤只处理战斗
 
-        result = self.game_engine.auto_play_step()
-        
-        if result['success']:
-            if result.get('message'):
-                self.add_message(result['message'])
-            
-            if result.get('game_completed'):
-                self.auto_play = False
-                self.add_message("游戏完成！自动游戏停止")
-        else:
-            self.add_message(f"自动游戏错误: {result['message']}")
-            self.auto_play = False
     def _play_trap_animation(self):
     
     #显示陷阱触发动画（例如红色闪烁）
     
         for _ in range(3):
-            self.screen.fill((255, 0, 0))  # 红色闪屏
+            self.screen.fill(Config.COLORS['RED'])  # 红色闪屏
             pygame.display.flip()
             pygame.time.delay(100)
             
@@ -574,6 +530,8 @@ class GameUI:
         if self.show_algorithm_info:
             panel_y = self._render_algorithm_panel(panel_x, panel_y)
         
+
+        
         # 交互提示面板
         if self.game_engine.pending_interaction:
             panel_y = self._render_interaction_panel(panel_x, panel_y)
@@ -684,6 +642,7 @@ class GameUI:
             "S: 统计信息开/关",
             "H: 帮助开/关",
             "I: 算法信息开/关",
+            "D: 动态规划分析",
             "ESC: 退出游戏"
         ]
         
