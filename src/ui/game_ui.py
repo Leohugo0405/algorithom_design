@@ -92,7 +92,7 @@ class GameUI:
         
         # 主游戏循环
         while self.running:
-            current_time = pygame.time.get_ticks()
+            # current_time = pygame.time.get_ticks()
             
             # 处理事件
             self._handle_events()

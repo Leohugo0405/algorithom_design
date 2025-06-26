@@ -28,7 +28,6 @@ class MazeGenerator:
             self.size += 1
         
         self.maze = [[Config.WALL for _ in range(self.size)] for _ in range(self.size)]
-        self.visited = [[False for _ in range(self.size)] for _ in range(self.size)]
         
     def generate_maze(self) -> List[List[str]]:
         """

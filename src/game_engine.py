@@ -117,7 +117,7 @@ class GameEngine:
     
     def _reset_game_state(self):
         """
-        重置游戏状态（移除玩家血量）
+        重置游戏状态
         """
         self.player_resources = 100
         self.collected_items = set()
