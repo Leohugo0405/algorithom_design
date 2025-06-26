@@ -67,6 +67,11 @@ class GameEngine:
         # 游戏模式
         self.ai_mode = True  # AI自动游戏模式
         self.visualization_enabled = True
+        
+        # 自动拾取功能
+        self.auto_pickup_enabled = False  # 自动拾取开关
+        self.auto_pickup_path = []  # 自动拾取路径
+        self.auto_pickup_target = None  # 当前自动拾取目标
     
     def initialize_game(self) -> Dict:
         """
@@ -130,6 +135,10 @@ class GameEngine:
         self.active_puzzle = None
         self.active_battle = None
         self.boss_configurations = {}  # 重置boss配置
+        
+        # 重置自动拾取状态
+        self.auto_pickup_path = []
+        self.auto_pickup_target = None
     
     def _initialize_boss_configurations(self):
         """
@@ -744,6 +753,300 @@ class GameEngine:
             'dp_result': dp_result,
             'greedy_result': greedy_result,
             'comparison': comparison
+        }
+    
+    def toggle_auto_pickup(self) -> Dict:
+        """
+        切换自动拾取功能开关
+        
+        Returns:
+            Dict: 切换结果
+        """
+        self.auto_pickup_enabled = not self.auto_pickup_enabled
+        
+        if not self.auto_pickup_enabled:
+            # 关闭自动拾取时清除路径
+            self.auto_pickup_path = []
+            self.auto_pickup_target = None
+        
+        return {
+            'success': True,
+            'auto_pickup_enabled': self.auto_pickup_enabled,
+            'message': f'自动拾取功能已{"开启" if self.auto_pickup_enabled else "关闭"}'
+        }
+    
+    def get_auto_pickup_status(self) -> Dict:
+        """
+        获取自动拾取状态信息
+        
+        Returns:
+            Dict: 自动拾取状态
+        """
+        return {
+            'enabled': self.auto_pickup_enabled,
+            'has_target': self.auto_pickup_target is not None,
+            'target_position': self.auto_pickup_target['position'] if self.auto_pickup_target else None,
+            'target_type': self.auto_pickup_target['type'] if self.auto_pickup_target else None,
+            'target_value': self.auto_pickup_target['value'] if self.auto_pickup_target else None,
+            'path_length': len(self.auto_pickup_path),
+            'remaining_steps': len(self.auto_pickup_path)
+        }
+    
+    def find_best_resource_in_vision(self) -> Optional[Dict]:
+        """
+        在玩家周围3x3区域内找到性价比最高的资源
+        
+        Returns:
+            Optional[Dict]: 最佳资源信息，如果没有资源则返回None
+        """
+        if not self.maze:
+            return None
+        
+        # 获取玩家周围3x3区域的所有资源
+        resources = self._get_resources_in_3x3_area()
+        available_resources = [r for r in resources if r['position'] not in self.collected_items]
+        
+        if not available_resources:
+            return None
+        
+        # 优先选择正价值资源（金币），按性价比排序
+        positive_resources = [r for r in available_resources if r['value'] > 0]
+        
+        if positive_resources:
+            return max(positive_resources, key=lambda x: x['cost_benefit'])
+        else:
+            # 如果只有陷阱，选择伤害最小的
+            return min(available_resources, key=lambda x: abs(x['value']))
+    
+    def _get_resources_in_3x3_area(self) -> List[Dict]:
+        """
+        获取玩家周围3x3区域内的所有资源
+        
+        Returns:
+            List[Dict]: 资源信息列表
+        """
+        if not self.player_pos:
+            return []
+        
+        x, y = self.player_pos
+        resources = []
+        
+        # 遍历玩家周围3x3区域（包括玩家当前位置）
+        for i in range(max(0, x - 1), min(self.maze_size, x + 2)):
+            for j in range(max(0, y - 1), min(self.maze_size, y + 2)):
+                cell = self.maze[i][j]
+                
+                # 只考虑有价值的资源（金币和陷阱）
+                if cell in [Config.GOLD, Config.TRAP]:
+                    distance = abs(i - x) + abs(j - y)  # 曼哈顿距离
+                    value = self._get_cell_value(cell)
+                    
+                    # 计算性价比（价值/距离），距离为0时设为最高优先级
+                    cost_benefit = value / max(1, distance) if distance > 0 else value * 10
+                    
+                    resources.append({
+                        'position': (i, j),
+                        'type': cell,
+                        'value': value,
+                        'distance': distance,
+                        'cost_benefit': cost_benefit
+                    })
+        
+        return resources
+    
+    def _get_cell_value(self, cell: str) -> int:
+        """
+        获取格子的价值
+        
+        Args:
+            cell: 格子类型
+        
+        Returns:
+            int: 格子价值
+        """
+        if cell == Config.GOLD:
+            return Config.GOLD_VALUE
+        elif cell == Config.TRAP:
+            return -Config.TRAP_RESOURCE_COST
+        else:
+            return 0
+    
+    def calculate_path_to_resource(self, target_pos: Tuple[int, int]) -> List[Tuple[int, int]]:
+        """
+        计算到达目标资源的路径（3x3区域内的简单路径）
+        
+        Args:
+            target_pos: 目标位置
+        
+        Returns:
+            List[Tuple[int, int]]: 路径坐标列表
+        """
+        if not self.player_pos:
+            return []
+        
+        # 对于3x3区域内的移动，使用简单的直线路径
+        current_x, current_y = self.player_pos
+        target_x, target_y = target_pos
+        
+        path = [self.player_pos]
+        
+        # 先水平移动，再垂直移动
+        while current_x != target_x or current_y != target_y:
+            if current_x < target_x:
+                current_x += 1
+            elif current_x > target_x:
+                current_x -= 1
+            elif current_y < target_y:
+                current_y += 1
+            elif current_y > target_y:
+                current_y -= 1
+            
+            # 检查是否可以移动到该位置
+            if (0 <= current_x < self.maze_size and 0 <= current_y < self.maze_size and 
+                self.maze[current_x][current_y] != Config.WALL):
+                path.append((current_x, current_y))
+            else:
+                # 如果遇到墙壁，返回空路径
+                return []
+        
+        return path
+    
+    def execute_auto_pickup_step(self) -> Dict:
+        """
+        执行一步自动拾取操作
+        
+        Returns:
+            Dict: 执行结果
+        """
+        if not self.auto_pickup_enabled:
+            return {'success': False, 'message': '自动拾取功能未开启'}
+        
+        # 如果没有当前目标或路径，寻找新目标
+        if not self.auto_pickup_target or not self.auto_pickup_path:
+            best_resource = self.find_best_resource_in_vision()
+            
+            if not best_resource:
+                return {
+                    'success': True,
+                    'action': 'no_resources',
+                    'message': '视野内没有可拾取的资源'
+                }
+            
+            # 计算到达目标的路径
+            path = self.calculate_path_to_resource(best_resource['position'])
+            
+            if not path:
+                return {
+                    'success': False,
+                    'action': 'path_blocked',
+                    'message': '无法到达目标资源'
+                }
+            
+            # 设置新目标和路径
+            self.auto_pickup_target = best_resource
+            self.auto_pickup_path = path[1:]  # 排除当前位置
+        
+        # 如果已到达目标位置，清除目标并寻找下一个
+        if self.player_pos == self.auto_pickup_target['position']:
+            self.auto_pickup_target = None
+            self.auto_pickup_path = []
+            return {
+                'success': True,
+                'action': 'target_reached',
+                'message': '已到达目标资源位置'
+            }
+        
+        # 执行下一步移动
+        if self.auto_pickup_path:
+            next_pos = self.auto_pickup_path[0]
+            self.auto_pickup_path = self.auto_pickup_path[1:]
+            
+            # 计算移动方向
+            direction = self._get_direction(self.player_pos, next_pos)
+            
+            # 执行移动
+            move_result = self.move_player(direction)
+            
+            if move_result['success']:
+                return {
+                    'success': True,
+                    'action': 'moved',
+                    'direction': direction,
+                    'new_position': move_result['new_position'],
+                    'interaction': move_result.get('interaction', {}),
+                    'target_info': {
+                        'position': self.auto_pickup_target['position'],
+                        'type': self.auto_pickup_target['type'],
+                        'value': self.auto_pickup_target['value'],
+                        'remaining_steps': len(self.auto_pickup_path)
+                    }
+                }
+            else:
+                # 移动失败，清除当前路径重新规划
+                self.auto_pickup_path = []
+                self.auto_pickup_target = None
+                return {
+                    'success': False,
+                    'action': 'move_failed',
+                    'message': '移动失败，重新规划路径'
+                }
+        
+        return {
+            'success': False,
+            'action': 'no_path',
+            'message': '没有可执行的路径'
+        }
+    
+    def auto_pickup_until_complete(self, max_steps: int = 1000) -> Dict:
+        """
+        持续执行自动拾取直到视野内没有资源或达到最大步数
+        
+        Args:
+            max_steps: 最大执行步数，防止无限循环
+        
+        Returns:
+            Dict: 执行结果统计
+        """
+        if not self.auto_pickup_enabled:
+            return {'success': False, 'message': '自动拾取功能未开启'}
+        
+        steps_taken = 0
+        resources_collected = 0
+        total_value_gained = 0
+        execution_log = []
+        
+        while steps_taken < max_steps:
+            step_result = self.execute_auto_pickup_step()
+            steps_taken += 1
+            
+            execution_log.append({
+                'step': steps_taken,
+                'result': step_result
+            })
+            
+            if not step_result['success']:
+                if step_result.get('action') == 'no_resources':
+                    break  # 正常结束：没有更多资源
+                else:
+                    continue  # 继续尝试
+            
+            # 检查是否收集到资源
+            if step_result.get('interaction', {}).get('type') in ['gold', 'trap']:
+                resources_collected += 1
+                total_value_gained += step_result['interaction'].get('value_change', 0)
+            
+            # 如果没有更多资源可拾取，结束
+            if step_result.get('action') == 'no_resources':
+                break
+        
+        return {
+            'success': True,
+            'steps_taken': steps_taken,
+            'resources_collected': resources_collected,
+            'total_value_gained': total_value_gained,
+            'final_position': self.player_pos,
+            'execution_log': execution_log[-10:] if len(execution_log) > 10 else execution_log,  # 只保留最后10步
+            'message': f'自动拾取完成：执行{steps_taken}步，收集{resources_collected}个资源，获得{total_value_gained}价值'
         }
     
 

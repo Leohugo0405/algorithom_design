@@ -171,7 +171,25 @@ class GameUI:
             # 切换算法信息显示
             self.show_algorithm_info = not self.show_algorithm_info
         
-
+        elif key == pygame.K_a:
+            # 切换自动拾取功能
+            if not self.paused and not self.game_completed:
+                toggle_result = self.game_engine.toggle_auto_pickup()
+                self.add_message(toggle_result['message'])
+                
+                # 如果开启了自动拾取，执行一次完整的自动拾取
+                if toggle_result['auto_pickup_enabled']:
+                    pickup_result = self.game_engine.auto_pickup_until_complete(max_steps=50)
+                    if pickup_result['success']:
+                        if pickup_result['resources_collected'] > 0:
+                            self.add_message(f"自动拾取完成: 收集了{pickup_result['resources_collected']}个资源")
+                            self.add_message(f"总价值获得: {pickup_result['total_value_gained']}")
+                        else:
+                            self.add_message("3x3区域内没有可收集的资源")
+                    else:
+                        self.add_message(f"自动拾取失败: {pickup_result.get('message', '未知错误')}")
+            else:
+                self.add_message("游戏暂停或已结束时无法使用自动拾取")
         
         elif key == pygame.K_c:
             # 比较路径策略
@@ -194,13 +212,13 @@ class GameUI:
         elif not self.paused and not self.game_completed:
             # 手动移动控制
             direction = None
-            if key == pygame.K_UP or key == pygame.K_w:
+            if key == pygame.K_UP :
                 direction = 'up'
-            elif key == pygame.K_DOWN or key == pygame.K_s:
+            elif key == pygame.K_DOWN:
                 direction = 'down'
             elif key == pygame.K_LEFT:
                 direction = 'left'
-            elif key == pygame.K_RIGHT or key == pygame.K_d:
+            elif key == pygame.K_RIGHT:
                 direction = 'right'
             
             if direction:
@@ -548,13 +566,16 @@ class GameUI:
         game_state = self.game_engine.get_game_state()
         
         # 面板背景
-        panel_height = 160
+        panel_height = 180
         pygame.draw.rect(self.screen, Config.COLORS['GRAY'], (x, y, 300, panel_height))
         pygame.draw.rect(self.screen, Config.COLORS['BLACK'], (x, y, 300, panel_height), 2)
         
         # 标题
         title = self.font.render("游戏统计", True, Config.COLORS['WHITE'])
         self.screen.blit(title, (x + 10, y + 10))
+        
+        # 获取自动拾取状态
+        auto_pickup_status = self.game_engine.get_auto_pickup_status()
         
         # 统计信息（移除生命值显示）
         stats_text = [
@@ -564,7 +585,8 @@ class GameUI:
             f"收集价值: {game_state['total_value_collected']}",
             f"收集物品: {game_state['collected_items']}",
             f"解谜数: {game_state['solved_puzzles']}",
-            f"击败BOSS: {game_state['defeated_bosses']}"
+            f"击败BOSS: {game_state['defeated_bosses']}",
+            f"自动拾取: {'开启' if auto_pickup_status['enabled'] else '关闭'}"
         ]
         
         for i, text in enumerate(stats_text):
@@ -629,7 +651,7 @@ class GameUI:
         controls_text = [
             "WASD/方向键: 移动",
             "ENTER: 与特殊方格交互",
-            "A: 自动游戏开/关",
+            "A: 3x3自动拾取开/关",
             "O: 显示最优路径",
             "G: 显示贪心路径",
             "C: 比较路径策略",
