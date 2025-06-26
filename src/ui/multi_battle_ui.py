@@ -54,6 +54,10 @@ class MultiMonsterBattleUI:
         self.strategy_stats = None
         self.monster_targets = {}
         
+        # 滚动状态
+        self.scroll_offset = 0
+        self.max_scroll_offset = 0
+        
         # UI布局
         self.player_area = pygame.Rect(50, 500, 300, 150)
         self.monsters_area = pygame.Rect(400, 100, 350, 400)
@@ -115,7 +119,12 @@ class MultiMonsterBattleUI:
                         self.battle_result = {'status': 'cancelled'}
             
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                self._handle_mouse_click(event.pos)
+                if event.button == 4:  # 滚轮向上
+                    self._handle_scroll_up()
+                elif event.button == 5:  # 滚轮向下
+                    self._handle_scroll_down()
+                else:
+                    self._handle_mouse_click(event.pos)
     
     def _handle_mouse_click(self, pos: Tuple[int, int]):
         """处理鼠标点击"""
@@ -222,6 +231,18 @@ class MultiMonsterBattleUI:
         self.optimal_strategy = None
         self.strategy_stats = None
         self.monster_targets = {}
+        self.scroll_offset = 0
+        self.max_scroll_offset = 0
+    
+    def _handle_scroll_up(self):
+        """处理向上滚动"""
+        if self.show_strategy_result:
+            self.scroll_offset = max(0, self.scroll_offset - 30)
+    
+    def _handle_scroll_down(self):
+        """处理向下滚动"""
+        if self.show_strategy_result:
+            self.scroll_offset = min(self.max_scroll_offset, self.scroll_offset + 30)
     
     def _find_multi_target_strategy(self, monsters_info: List[Dict], player_resources: int) -> Dict:
         """寻找多目标战斗策略"""
@@ -567,16 +588,23 @@ class MultiMonsterBattleUI:
         pygame.draw.rect(self.screen, Config.COLORS['BLUE'], result_rect)
         pygame.draw.rect(self.screen, Config.COLORS['WHITE'], result_rect, 3)
         
-        # 标题
+        # 创建可滚动内容区域
+        content_rect = pygame.Rect(result_rect.x + 10, result_rect.y + 60, result_rect.width - 20, result_rect.height - 100)
+        
+        # 标题（固定位置）
         title_text = self.title_font.render("BOSS战策略优化结果", True, Config.COLORS['WHITE'])
         self.screen.blit(title_text, (result_rect.x + 20, result_rect.y + 20))
         
-        y_offset = 70
+        # 创建内容表面用于滚动
+        content_surface = pygame.Surface((content_rect.width, 2000))  # 足够大的表面
+        content_surface.fill(Config.COLORS['BLUE'])
+        
+        y_offset = 10  # 在内容表面上的偏移
         
         if self.optimal_strategy:
             # 最优策略信息
             strategy_title = self.font.render(f"最优技能序列 (共{len(self.optimal_strategy)}回合):", True, Config.COLORS['YELLOW'])
-            self.screen.blit(strategy_title, (result_rect.x + 20, result_rect.y + y_offset))
+            content_surface.blit(strategy_title, (10, y_offset))
             y_offset += 40
             
             # 技能序列
@@ -586,7 +614,7 @@ class MultiMonsterBattleUI:
                 # 基本技能信息
                 skill_text = f"{i+1}. {skill_info['name']} (伤害: {skill_info.get('damage', 0)}, 冷却: {skill_info.get('cooldown', 0)}回合)"
                 skill_surface = self.small_font.render(skill_text, True, Config.COLORS['WHITE'])
-                self.screen.blit(skill_surface, (result_rect.x + 40, result_rect.y + y_offset))
+                content_surface.blit(skill_surface, (30, y_offset))
                 y_offset += 20
                 
                 # 目标信息
@@ -594,24 +622,21 @@ class MultiMonsterBattleUI:
                     target_info = self.monster_targets[i]
                     target_text = f"   → 攻击目标: {target_info['monster_name']} (ID: {target_info['monster_id']}) 剩余血量: {target_info['remaining_hp']}"
                     target_surface = self.small_font.render(target_text, True, Config.COLORS['YELLOW'])
-                    self.screen.blit(target_surface, (result_rect.x + 40, result_rect.y + y_offset))
+                    content_surface.blit(target_surface, (30, y_offset))
                     y_offset += 20
                 else:
                     y_offset += 5
-                
-                if y_offset > result_rect.height - 120:  # 防止超出窗口
-                    break
         else:
             # 无解情况
             no_solution_text = self.font.render("在当前条件下无法找到可行的策略", True, Config.COLORS['RED'])
-            self.screen.blit(no_solution_text, (result_rect.x + 20, result_rect.y + y_offset))
+            content_surface.blit(no_solution_text, (10, y_offset))
             y_offset += 40
         
         # 统计信息
         if self.strategy_stats:
             y_offset += 20
             stats_title = self.font.render("算法统计信息:", True, Config.COLORS['YELLOW'])
-            self.screen.blit(stats_title, (result_rect.x + 20, result_rect.y + y_offset))
+            content_surface.blit(stats_title, (10, y_offset))
             y_offset += 30
             
             stats_info = [
@@ -635,9 +660,35 @@ class MultiMonsterBattleUI:
             
             for stat in stats_info:
                 stat_surface = self.small_font.render(stat, True, Config.COLORS['WHITE'])
-                self.screen.blit(stat_surface, (result_rect.x + 40, result_rect.y + y_offset))
+                content_surface.blit(stat_surface, (30, y_offset))
                 y_offset += 25
         
-        # 关闭提示
+        # 计算最大滚动偏移量
+        content_height = y_offset + 50  # 添加一些底部边距
+        self.max_scroll_offset = max(0, content_height - content_rect.height)
+        
+        # 限制滚动偏移量
+        self.scroll_offset = min(self.scroll_offset, self.max_scroll_offset)
+        
+        # 绘制可滚动内容
+        visible_area = pygame.Rect(0, self.scroll_offset, content_rect.width, content_rect.height)
+        self.screen.blit(content_surface, content_rect, visible_area)
+        
+        # 绘制滚动条（如果需要）
+        if self.max_scroll_offset > 0:
+            scrollbar_rect = pygame.Rect(result_rect.x + result_rect.width - 15, content_rect.y, 10, content_rect.height)
+            pygame.draw.rect(self.screen, Config.COLORS['GRAY'], scrollbar_rect)
+            
+            # 滚动条滑块
+            thumb_height = max(20, int(content_rect.height * content_rect.height / content_height))
+            thumb_y = content_rect.y + int(self.scroll_offset * (content_rect.height - thumb_height) / self.max_scroll_offset)
+            thumb_rect = pygame.Rect(scrollbar_rect.x, thumb_y, scrollbar_rect.width, thumb_height)
+            pygame.draw.rect(self.screen, Config.COLORS['WHITE'], thumb_rect)
+        
+        # 关闭提示和滚动提示（固定位置）
         close_hint = self.small_font.render("按ESC键关闭", True, Config.COLORS['GRAY'])
         self.screen.blit(close_hint, (result_rect.x + result_rect.width - 120, result_rect.y + result_rect.height - 30))
+        
+        if self.max_scroll_offset > 0:
+            scroll_hint = self.small_font.render("使用滚轮上下滚动", True, Config.COLORS['GRAY'])
+            self.screen.blit(scroll_hint, (result_rect.x + 20, result_rect.y + result_rect.height - 30))
