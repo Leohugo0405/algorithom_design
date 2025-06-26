@@ -61,6 +61,9 @@ class GameEngine:
         # 待交互状态
         self.pending_interaction = None  # 存储待交互的特殊方格信息
         
+        # Boss战斗配置 - 在迷宫生成时固定每个boss位置的难度
+        self.boss_configurations = {}  # {(x, y): scenario_name}
+        
         # 游戏模式
         self.ai_mode = True  # AI自动游戏模式
         self.visualization_enabled = True
@@ -89,6 +92,9 @@ class GameEngine:
         
         # 重置游戏状态
         self._reset_game_state()
+        
+        # 为每个boss位置分配固定的战斗场景
+        self._initialize_boss_configurations()
         
         return {
             'success': True,
@@ -123,6 +129,22 @@ class GameEngine:
         self.battles_fought = 0
         self.active_puzzle = None
         self.active_battle = None
+        self.boss_configurations = {}  # 重置boss配置
+    
+    def _initialize_boss_configurations(self):
+        """
+        为每个boss位置分配固定的战斗场景，确保重复进入时难度不变
+        """
+        self.boss_configurations = {}
+        scenarios = list(Config.MULTI_BATTLE_SCENARIOS.keys())
+        
+        # 找到所有boss位置
+        for i in range(self.maze_size):
+            for j in range(self.maze_size):
+                if self.maze[i][j] == Config.BOSS:
+                    # 为每个boss位置随机分配一个战斗场景（但在游戏过程中保持不变）
+                    selected_scenario = random.choice(scenarios)
+                    self.boss_configurations[(i, j)] = selected_scenario
     
     def get_game_state(self) -> Dict:
         """
@@ -249,9 +271,8 @@ class GameEngine:
         
         elif cell == Config.BOSS:
             if (x, y) not in self.defeated_bosses:
-                # 随机选择一个多怪物战斗场景
-                scenarios = list(Config.MULTI_BATTLE_SCENARIOS.keys())
-                selected_scenario = random.choice(scenarios)
+                # 使用预设的战斗场景配置，确保重复进入时难度不变
+                selected_scenario = self.boss_configurations.get((x, y), 'medium')  # 默认中等难度
                 
                 self.pending_interaction = {
                     'position': (x, y),
