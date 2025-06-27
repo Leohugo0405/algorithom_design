@@ -63,16 +63,116 @@ class LockUI:
         
         # 初始化字体
         try:
-            self.title_font = pygame.font.Font('font/msyh.ttc', 32)
-            self.font = pygame.font.Font('font/msyh.ttc', 20)
-            self.small_font = pygame.font.Font('font/msyh.ttc', 16)
+            self.title_font = pygame.font.Font('d:/pycharm代码/algorithom/font/msyh.ttc', 32)
+            self.font = pygame.font.Font('d:/pycharm代码/algorithom/font/msyh.ttc', 20)
+            self.small_font = pygame.font.Font('d:/pycharm代码/algorithom/font/msyh.ttc', 16)
+            # emoji字体
+            self.emoji_title_font = pygame.font.Font('d:/pycharm代码/algorithom/font/seguiemj.ttf', 32)
+            self.emoji_font = pygame.font.Font('d:/pycharm代码/algorithom/font/seguiemj.ttf', 20)
+            self.emoji_small_font = pygame.font.Font('d:/pycharm代码/algorithom/font/seguiemj.ttf', 16)
         except:
             self.title_font = pygame.font.SysFont('Arial', 32)
             self.font = pygame.font.SysFont('Arial', 20)
             self.small_font = pygame.font.SysFont('Arial', 16)
+            # emoji字体fallback
+            self.emoji_title_font = pygame.font.SysFont('Arial', 32)
+            self.emoji_font = pygame.font.SysFont('Arial', 20)
+            self.emoji_small_font = pygame.font.SysFont('Arial', 16)
         
         # 初始化UI元素
         self._initialize_ui_elements()
+    
+    def _render_mixed_text(self, text: str, size: str, color: Tuple[int, int, int]) -> pygame.Surface:
+        """
+        渲染包含文字和emoji的混合文本
+        
+        Args:
+            text: 要渲染的文本
+            size: 字体大小 ('normal', 'small', 'title')
+            color: 文字颜色
+            
+        Returns:
+            渲染后的Surface
+        """
+        # 选择字体
+        if size == 'title':
+            text_font = self.title_font
+            emoji_font = self.emoji_title_font
+        elif size == 'small':
+            text_font = self.small_font
+            emoji_font = self.emoji_small_font
+        else:  # normal
+            text_font = self.font
+            emoji_font = self.emoji_font
+        
+        # 如果文本为空或只包含不可见字符，返回最小尺寸的透明surface
+        if not text or text.strip() == "":
+            return pygame.Surface((1, text_font.get_height()), pygame.SRCALPHA)
+        
+        # 分析文本，分离emoji和普通文字
+        segments = []
+        current_segment = ""
+        is_emoji = False
+        
+        for char in text:
+            char_code = ord(char)
+            # 判断是否为emoji字符
+            char_is_emoji = (
+                0x1F600 <= char_code <= 0x1F64F or  # 表情符号
+                0x1F300 <= char_code <= 0x1F5FF or  # 杂项符号
+                0x1F680 <= char_code <= 0x1F6FF or  # 交通和地图符号
+                0x1F1E0 <= char_code <= 0x1F1FF or  # 区域指示符号
+                0x2600 <= char_code <= 0x26FF or   # 杂项符号
+                0x2700 <= char_code <= 0x27BF or   # 装饰符号
+                0xFE00 <= char_code <= 0xFE0F or   # 变体选择器
+                0x1F900 <= char_code <= 0x1F9FF     # 补充符号
+            )
+            
+            if char_is_emoji != is_emoji:
+                if current_segment:
+                    segments.append((current_segment, is_emoji))
+                current_segment = char
+                is_emoji = char_is_emoji
+            else:
+                current_segment += char
+        
+        if current_segment:
+            segments.append((current_segment, is_emoji))
+        
+        # 如果只有一个段落，直接渲染
+        if len(segments) == 1:
+            segment_text, is_emoji = segments[0]
+            # 检查是否为不可见字符（如变体选择器）
+            if not segment_text or segment_text.strip() == "" or all(0xFE00 <= ord(c) <= 0xFE0F for c in segment_text):
+                return pygame.Surface((1, text_font.get_height()), pygame.SRCALPHA)
+            font = emoji_font if is_emoji else text_font
+            return font.render(segment_text, True, color)
+        
+        # 渲染各个段落并组合
+        surfaces = []
+        total_width = 0
+        max_height = 0
+        
+        for segment_text, is_emoji in segments:
+            # 跳过空的段落或不可见字符（如变体选择器）
+            if not segment_text or segment_text.strip() == "" or all(0xFE00 <= ord(c) <= 0xFE0F for c in segment_text):
+                continue
+            font = emoji_font if is_emoji else text_font
+            surface = font.render(segment_text, True, color)
+            surfaces.append(surface)
+            total_width += surface.get_width()
+            max_height = max(max_height, surface.get_height())
+        
+        # 创建组合surface
+        combined_surface = pygame.Surface((total_width, max_height), pygame.SRCALPHA)
+        x_offset = 0
+        
+        for surface in surfaces:
+            y_offset = (max_height - surface.get_height()) // 2
+            combined_surface.blit(surface, (x_offset, y_offset))
+            x_offset += surface.get_width()
+        
+        return combined_surface
     
     def _initialize_ui_elements(self):
         """
@@ -296,13 +396,13 @@ class LockUI:
         渲染标题
         """
         title_text = "密码锁解谜"
-        title_surface = self.title_font.render(title_text, True, Config.COLORS['BLACK'])
+        title_surface = self._render_mixed_text(title_text, 'title', Config.COLORS['BLACK'])
         title_rect = title_surface.get_rect(center=(400, 80))
         self.screen.blit(title_surface, title_rect)
         
         # 渲染描述
         desc_text = self.lock_data['puzzle']['description']
-        desc_surface = self.font.render(desc_text, True, Config.COLORS['GRAY'])
+        desc_surface = self._render_mixed_text(desc_text, 'normal', Config.COLORS['GRAY'])
         desc_rect = desc_surface.get_rect(center=(400, 120))
         self.screen.blit(desc_surface, desc_rect)
     
@@ -311,12 +411,12 @@ class LockUI:
         渲染线索
         """
         clues_title = "线索："
-        title_surface = self.font.render(clues_title, True, Config.COLORS['BLACK'])
+        title_surface = self._render_mixed_text(clues_title, 'normal', Config.COLORS['BLACK'])
         self.screen.blit(title_surface, (50, 160))
         
         clues = self.lock_data['puzzle']['clues']
         for i, clue in enumerate(clues):
-            clue_surface = self.small_font.render(f"• {clue}", True, Config.COLORS['DARK_GREEN'])
+            clue_surface = self._render_mixed_text(f"• {clue}", 'small', Config.COLORS['DARK_GREEN'])
             self.screen.blit(clue_surface, (70, 190 + i * 25))
     
     def _render_input_boxes(self):
@@ -332,7 +432,7 @@ class LockUI:
             # 绘制输入的数字
             if i < len(self.current_input):
                 digit_text = str(self.current_input[i])
-                digit_surface = self.title_font.render(digit_text, True, Config.COLORS['BLACK'])
+                digit_surface = self._render_mixed_text(digit_text, 'title', Config.COLORS['BLACK'])
                 digit_rect = digit_surface.get_rect(center=box.center)
                 self.screen.blit(digit_surface, digit_rect)
     
@@ -346,7 +446,7 @@ class LockUI:
             pygame.draw.rect(self.screen, Config.COLORS['BLACK'], button, 2)
             
             # 数字文本
-            number_text = self.font.render(str(i), True, Config.COLORS['BLACK'])
+            number_text = self._render_mixed_text(str(i), 'normal', Config.COLORS['BLACK'])
             number_rect = number_text.get_rect(center=button.center)
             self.screen.blit(number_text, number_rect)
     
@@ -357,28 +457,28 @@ class LockUI:
         # 清除按钮
         pygame.draw.rect(self.screen, Config.COLORS['ORANGE'], self.clear_button)
         pygame.draw.rect(self.screen, Config.COLORS['BLACK'], self.clear_button, 2)
-        clear_text = self.small_font.render("清除", True, Config.COLORS['WHITE'])
+        clear_text = self._render_mixed_text("清除", 'small', Config.COLORS['WHITE'])
         clear_rect = clear_text.get_rect(center=self.clear_button.center)
         self.screen.blit(clear_text, clear_rect)
         
         # 提交按钮
         pygame.draw.rect(self.screen, Config.COLORS['GREEN'], self.submit_button)
         pygame.draw.rect(self.screen, Config.COLORS['BLACK'], self.submit_button, 2)
-        submit_text = self.small_font.render("提交", True, Config.COLORS['WHITE'])
+        submit_text = self._render_mixed_text("提交", 'small', Config.COLORS['WHITE'])
         submit_rect = submit_text.get_rect(center=self.submit_button.center)
         self.screen.blit(submit_text, submit_rect)
         
         # AI解谜按钮
         pygame.draw.rect(self.screen, Config.COLORS['BLUE'], self.auto_solve_button)
         pygame.draw.rect(self.screen, Config.COLORS['BLACK'], self.auto_solve_button, 2)
-        auto_text = self.small_font.render("AI解谜", True, Config.COLORS['WHITE'])
+        auto_text = self._render_mixed_text("AI解谜", 'small', Config.COLORS['WHITE'])
         auto_rect = auto_text.get_rect(center=self.auto_solve_button.center)
         self.screen.blit(auto_text, auto_rect)
         
         # 返回按钮
         pygame.draw.rect(self.screen, Config.COLORS['GRAY'], self.back_button)
         pygame.draw.rect(self.screen, Config.COLORS['BLACK'], self.back_button, 2)
-        back_text = self.small_font.render("返回", True, Config.COLORS['WHITE'])
+        back_text = self._render_mixed_text("返回", 'small', Config.COLORS['WHITE'])
         back_rect = back_text.get_rect(center=self.back_button.center)
         self.screen.blit(back_text, back_rect)
     
@@ -399,7 +499,7 @@ class LockUI:
         
         # 消息文本
         color = Config.COLORS['GREEN'] if self.puzzle_solved else Config.COLORS['RED']
-        message_surface = self.font.render(self.result_message, True, color)
+        message_surface = self._render_mixed_text(self.result_message, 'normal', color)
         message_rect = message_surface.get_rect(center=message_box.center)
         self.screen.blit(message_surface, message_rect)
         

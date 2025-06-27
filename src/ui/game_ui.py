@@ -76,13 +76,123 @@ class GameUI:
         # 创建时钟
         self.clock = pygame.time.Clock()
         
-        # 初始化字体
+        # 初始化字体 - 分别为文字和emoji使用不同字体
         try:
-            self.font = pygame.font.Font('font/msyh.ttc', 18)
-            self.small_font = pygame.font.Font('font/msyh.ttc', 12)
-        except:
+            # 文字字体
+            self.font = pygame.font.Font('d:/pycharm代码/algorithom/font/msyh.ttc', 18)
+            self.small_font = pygame.font.Font('d:/pycharm代码/algorithom/font/msyh.ttc', 12)
+            
+            # emoji字体
+            self.emoji_font = pygame.font.Font('d:/pycharm代码/algorithom/font/seguiemj.ttf', 18)
+            self.emoji_small_font = pygame.font.Font('d:/pycharm代码/algorithom/font/seguiemj.ttf', 12)
+        except Exception as e:
+            print(f"字体加载失败: {e}")
+            # 备用字体
             self.font = pygame.font.SysFont('Arial', 18)
             self.small_font = pygame.font.SysFont('Arial', 12)
+            self.emoji_font = pygame.font.SysFont('Arial', 18)
+            self.emoji_small_font = pygame.font.SysFont('Arial', 12)
+    
+    def _render_mixed_text(self, text, font_size='normal', color=(255, 255, 255)):
+        """
+        渲染包含文字和emoji的混合文本
+        
+        Args:
+            text: 要渲染的文本
+            font_size: 字体大小 ('normal', 'small')
+            color: 文字颜色
+        
+        Returns:
+            pygame.Surface: 渲染后的文本表面
+        """
+        # 处理空文本或None
+        if not text or text.strip() == "":
+            # 返回一个最小尺寸的透明表面
+            if font_size == 'small':
+                font_height = self.small_font.get_height()
+            else:
+                font_height = self.font.get_height()
+            return pygame.Surface((1, font_height), pygame.SRCALPHA)
+        
+        # 选择字体
+        if font_size == 'small':
+            text_font = self.small_font
+            emoji_font = self.emoji_small_font
+        else:
+            text_font = self.font
+            emoji_font = self.emoji_font
+        
+        # 分析文本，分离emoji和普通文字
+        segments = []
+        current_segment = ""
+        is_emoji = False
+        
+        for char in text:
+            # 判断是否为emoji (简化版本，检查Unicode范围)
+            char_is_emoji = (
+                0x1F600 <= ord(char) <= 0x1F64F or  # 表情符号
+                0x1F300 <= ord(char) <= 0x1F5FF or  # 杂项符号
+                0x1F680 <= ord(char) <= 0x1F6FF or  # 交通和地图符号
+                0x1F1E0 <= ord(char) <= 0x1F1FF or  # 区域指示符号
+                0x2600 <= ord(char) <= 0x26FF or   # 杂项符号
+                0x2700 <= ord(char) <= 0x27BF or   # 装饰符号
+                0xFE00 <= ord(char) <= 0xFE0F or   # 变体选择器
+                0x1F900 <= ord(char) <= 0x1F9FF     # 补充符号
+            )
+            
+            if char_is_emoji != is_emoji:
+                # 类型改变，保存当前段落
+                if current_segment:
+                    segments.append((current_segment, is_emoji))
+                current_segment = char
+                is_emoji = char_is_emoji
+            else:
+                current_segment += char
+        
+        # 添加最后一个段落
+        if current_segment:
+            segments.append((current_segment, is_emoji))
+        
+        # 如果只有一种类型的文本，直接渲染
+        if len(segments) == 1:
+            segment_text, is_emoji_segment = segments[0]
+            # 检查是否为空文本或不可见字符（如变体选择器）
+            if not segment_text or segment_text.strip() == "" or all(0xFE00 <= ord(c) <= 0xFE0F for c in segment_text):
+                return pygame.Surface((1, text_font.get_height()), pygame.SRCALPHA)
+            font = emoji_font if is_emoji_segment else text_font
+            return font.render(segment_text, True, color)
+        
+        # 渲染各个段落
+        rendered_segments = []
+        total_width = 0
+        max_height = 0
+        
+        for segment_text, is_emoji_segment in segments:
+            # 跳过空的段落或不可见字符（如变体选择器）
+            if not segment_text or segment_text.strip() == "" or all(0xFE00 <= ord(c) <= 0xFE0F for c in segment_text):
+                continue
+            font = emoji_font if is_emoji_segment else text_font
+            rendered = font.render(segment_text, True, color)
+            rendered_segments.append(rendered)
+            total_width += rendered.get_width()
+            max_height = max(max_height, rendered.get_height())
+        
+        # 创建组合表面
+        if total_width == 0 or max_height == 0:
+            # 创建一个最小尺寸的透明表面，避免"Text has zero width"错误
+            min_surface = pygame.Surface((1, text_font.get_height()), pygame.SRCALPHA)
+            return min_surface
+        
+        combined_surface = pygame.Surface((total_width, max_height), pygame.SRCALPHA)
+        
+        # 将各段落绘制到组合表面
+        x_offset = 0
+        for rendered in rendered_segments:
+            y_offset = (max_height - rendered.get_height()) // 2
+            combined_surface.blit(rendered, (x_offset, y_offset))
+            x_offset += rendered.get_width()
+        
+        return combined_surface
     
     def run(self):
         """
@@ -582,7 +692,7 @@ class GameUI:
                         text_color = Config.COLORS['WHITE']
                         symbol = cell
                     
-                    text_surface = self.small_font.render(symbol, True, text_color)
+                    text_surface = self._render_mixed_text(symbol, 'small', text_color)
                     text_rect = text_surface.get_rect(center=(x + cell_size // 2, y + cell_size // 2))
                     self.screen.blit(text_surface, text_rect)
     
@@ -707,7 +817,7 @@ class GameUI:
                         (legend_x, legend_y, legend_width, title_height))
         
         # 绘制标题
-        title = self.font.render("🗺️ 路径方案图例", True, Config.COLORS['WHITE'])
+        title = self._render_mixed_text("🗺️ 路径方案图例", 'normal', Config.COLORS['WHITE'])
         title_rect = title.get_rect(center=(legend_x + legend_width // 2, legend_y + title_height // 2))
         self.screen.blit(title, title_rect)
         
@@ -730,7 +840,7 @@ class GameUI:
             if i < len(path_colors):
                 color, icon, color_name = path_colors[i]
                 # 绘制图标
-                icon_surface = self.small_font.render(icon, True, color)
+                icon_surface = self._render_mixed_text(icon, 'small', color)
                 self.screen.blit(icon_surface, (legend_x + 8, y_offset))
                 
                 # 绘制线条
@@ -742,7 +852,7 @@ class GameUI:
             name = alt.get('name', f'方案{i+1}')
             value = alt.get('total_value', 0)
             text = f"{name} (价值:{value})"
-            text_surface = self.small_font.render(text, True, Config.COLORS['TEXT_PRIMARY'])
+            text_surface = self._render_mixed_text(text, 'small', Config.COLORS['TEXT_PRIMARY'])
             self.screen.blit(text_surface, (legend_x + 55, y_offset))
     
     def _render_player(self):
@@ -779,7 +889,7 @@ class GameUI:
         
         # 绘制玩家图标
         player_symbol = "🚶"
-        symbol_surface = self.small_font.render(player_symbol, True, Config.COLORS['WHITE'])
+        symbol_surface = self._render_mixed_text(player_symbol, 'small', Config.COLORS['WHITE'])
         symbol_rect = symbol_surface.get_rect(center=(x, y))
         self.screen.blit(symbol_surface, symbol_rect)
     
@@ -844,7 +954,7 @@ class GameUI:
         pygame.draw.rect(self.screen, Config.COLORS['PRIMARY'], (x, y, panel_width, title_height))
         
         # 标题
-        title = self.font.render("📊 游戏统计", True, Config.COLORS['WHITE'])
+        title = self._render_mixed_text("📊 游戏统计", 'normal', Config.COLORS['WHITE'])
         title_rect = title.get_rect(center=(x + panel_width // 2, y + title_height // 2))
         self.screen.blit(title, title_rect)
         
@@ -869,15 +979,15 @@ class GameUI:
             item_y = start_y + i * 22
             
             # 绘制图标
-            icon_surface = self.small_font.render(icon, True, color)
+            icon_surface = self._render_mixed_text(icon, 'small', color)
             self.screen.blit(icon_surface, (x + 15, item_y))
             
             # 绘制标签
-            label_surface = self.small_font.render(f"{label}:", True, Config.COLORS['TEXT_SECONDARY'])
+            label_surface = self._render_mixed_text(f"{label}:", 'small', Config.COLORS['TEXT_SECONDARY'])
             self.screen.blit(label_surface, (x + 40, item_y))
             
             # 绘制数值
-            value_surface = self.small_font.render(value, True, color)
+            value_surface = self._render_mixed_text(value, 'small', color)
             value_rect = value_surface.get_rect()
             self.screen.blit(value_surface, (x + panel_width - value_rect.width - 15, item_y))
         
@@ -915,7 +1025,7 @@ class GameUI:
         pygame.draw.rect(self.screen, Config.COLORS['WARNING'], (x, y, panel_width, title_height))
         
         # 标题
-        title = self.font.render("⚡ 可交互内容", True, Config.COLORS['BLACK'])
+        title = self._render_mixed_text("⚡ 可交互内容", 'normal', Config.COLORS['BLACK'])
         title_rect = title.get_rect(center=(x + panel_width // 2, y + title_height // 2))
         self.screen.blit(title, title_rect)
         
@@ -938,16 +1048,16 @@ class GameUI:
         content_y = y + title_height + 15
         
         # 绘制图标
-        icon_surface = self.font.render(icon, True, hint_color)
+        icon_surface = self._render_mixed_text(icon, 'normal', hint_color)
         self.screen.blit(icon_surface, (x + 15, content_y))
         
         # 绘制提示文字
-        hint_surface = self.small_font.render(hint_text, True, Config.COLORS['TEXT_PRIMARY'])
+        hint_surface = self._render_mixed_text(hint_text, 'small', Config.COLORS['TEXT_PRIMARY'])
         self.screen.blit(hint_surface, (x + 50, content_y + 5))
         
         # 绘制按键提示
         key_hint = "[Enter] 交互"
-        key_surface = self.small_font.render(key_hint, True, Config.COLORS['HIGHLIGHT'])
+        key_surface = self._render_mixed_text(key_hint, 'small', Config.COLORS['HIGHLIGHT'])
         key_rect = key_surface.get_rect()
         self.screen.blit(key_surface, (x + panel_width - key_rect.width - 15, content_y + 5))
         
@@ -984,7 +1094,7 @@ class GameUI:
         pygame.draw.rect(self.screen, Config.COLORS['INFO'], (x, y, panel_width, title_height))
         
         # 标题
-        title = self.font.render("🎮 控制帮助", True, Config.COLORS['WHITE'])
+        title = self._render_mixed_text("🎮 控制帮助", 'normal', Config.COLORS['WHITE'])
         title_rect = title.get_rect(center=(x + panel_width // 2, y + title_height // 2))
         self.screen.blit(title, title_rect)
         
@@ -1009,15 +1119,15 @@ class GameUI:
             item_y = start_y + i * 16
             
             # 绘制图标
-            icon_surface = self.small_font.render(icon, True, color)
+            icon_surface = self._render_mixed_text(icon, 'small', color)
             self.screen.blit(icon_surface, (x + 10, item_y))
             
             # 绘制动作
-            action_surface = self.small_font.render(action, True, Config.COLORS['TEXT_SECONDARY'])
+            action_surface = self._render_mixed_text(action, 'small', Config.COLORS['TEXT_SECONDARY'])
             self.screen.blit(action_surface, (x + 35, item_y))
             
             # 绘制按键 - 右对齐
-            key_surface = self.small_font.render(key, True, color)
+            key_surface = self._render_mixed_text(key, 'small', color)
             key_rect = key_surface.get_rect()
             self.screen.blit(key_surface, (x + panel_width - key_rect.width - 15, item_y))
         
@@ -1054,7 +1164,7 @@ class GameUI:
         pygame.draw.rect(self.screen, Config.COLORS['PURPLE'], (x, y, panel_width, title_height))
         
         # 标题
-        title = self.font.render("🧠 算法信息", True, Config.COLORS['WHITE'])
+        title = self._render_mixed_text("🧠 算法信息", 'normal', Config.COLORS['WHITE'])
         title_rect = title.get_rect(center=(x + panel_width // 2, y + title_height // 2))
         self.screen.blit(title, title_rect)
         
@@ -1073,15 +1183,15 @@ class GameUI:
             item_y = start_y + i * 18
             
             # 绘制图标
-            icon_surface = self.small_font.render(icon, True, color)
+            icon_surface = self._render_mixed_text(icon, 'small', color)
             self.screen.blit(icon_surface, (x + 10, item_y))
             
             # 绘制算法名称
-            algo_surface = self.small_font.render(algorithm, True, color)
+            algo_surface = self._render_mixed_text(algorithm, 'small', color)
             self.screen.blit(algo_surface, (x + 35, item_y))
             
             # 绘制用途
-            usage_surface = self.small_font.render(usage, True, Config.COLORS['TEXT_SECONDARY'])
+            usage_surface = self._render_mixed_text(usage, 'small', Config.COLORS['TEXT_SECONDARY'])
             usage_rect = usage_surface.get_rect()
             self.screen.blit(usage_surface, (x + panel_width - usage_rect.width - 15, item_y))
         
@@ -1100,11 +1210,11 @@ class GameUI:
             item_y = separator_y + 10 + i * 16
             
             # 绘制颜色图标
-            icon_surface = self.small_font.render(icon, True, color)
+            icon_surface = self._render_mixed_text(icon, 'small', color)
             self.screen.blit(icon_surface, (x + 10, item_y))
             
             # 绘制说明
-            desc_surface = self.small_font.render(desc, True, Config.COLORS['TEXT_SECONDARY'])
+            desc_surface = self._render_mixed_text(desc, 'small', Config.COLORS['TEXT_SECONDARY'])
             self.screen.blit(desc_surface, (x + 35, item_y))
         
         return y + panel_height + 15
@@ -1137,7 +1247,7 @@ class GameUI:
         pygame.draw.rect(self.screen, Config.COLORS['SUCCESS'], (x, y, panel_width, title_height))
         
         # 标题
-        title = self.font.render("💬 消息", True, Config.COLORS['WHITE'])
+        title = self._render_mixed_text("💬 消息", 'normal', Config.COLORS['WHITE'])
         title_rect = title.get_rect(center=(x + panel_width // 2, y + title_height // 2))
         self.screen.blit(title, title_rect)
         
@@ -1162,12 +1272,12 @@ class GameUI:
             pygame.draw.circle(self.screen, msg_color, (x + 15, item_y + 6), 2)
             
             # 绘制消息文本
-            text_surface = self.small_font.render(message, True, msg_color)
+            text_surface = self._render_mixed_text(message, 'small', msg_color)
             # 限制文本长度以适应面板宽度
             if text_surface.get_width() > panel_width - 40:
                 # 截断过长的消息
                 truncated_msg = message[:40] + "..."
-                text_surface = self.small_font.render(truncated_msg, True, msg_color)
+                text_surface = self._render_mixed_text(truncated_msg, 'small', msg_color)
             
             self.screen.blit(text_surface, (x + 25, item_y))
     
@@ -1192,13 +1302,21 @@ class GameUI:
             pygame.draw.circle(self.screen, dark_color, (center_x, center_y), radius, 2)
         
         # 主标题
-        title_font = pygame.font.Font('font/msyh.ttc', 32) if hasattr(self, 'font') else pygame.font.SysFont('Arial', 32)
-        title = title_font.render("🎮 迷宫探险游戏", True, Config.COLORS['PRIMARY'])
-        title_rect = title.get_rect(center=(center_x, 120))
-        self.screen.blit(title, title_rect)
+        try:
+            title_font = pygame.font.Font('d:/pycharm代码/algorithom/font/msyh.ttc', 32)
+            emoji_title_font = pygame.font.Font('d:/pycharm代码/algorithom/font/seguiemj.ttf', 32)
+        except:
+            title_font = pygame.font.SysFont('Arial', 32)
+            emoji_title_font = pygame.font.SysFont('Arial', 32)
+        
+        # 渲染主标题（包含emoji）
+        title_text = "🎮 迷宫探险游戏"
+        title_surface = self._render_mixed_text(title_text, 'normal', Config.COLORS['PRIMARY'])
+        title_rect = title_surface.get_rect(center=(center_x, 120))
+        self.screen.blit(title_surface, title_rect)
         
         # 副标题
-        subtitle = self.font.render("算法驱动的智能探险", True, Config.COLORS['TEXT_SECONDARY'])
+        subtitle = self._render_mixed_text("算法驱动的智能探险", 'normal', Config.COLORS['TEXT_SECONDARY'])
         subtitle_rect = subtitle.get_rect(center=(center_x, 160))
         self.screen.blit(subtitle, subtitle_rect)
         
@@ -1221,18 +1339,18 @@ class GameUI:
         size_y = panel_y + 40
         
         # 迷宫大小标题
-        size_title = self.font.render("🏗️ 迷宫大小设置", True, Config.COLORS['PRIMARY'])
+        size_title = self._render_mixed_text("🏗️ 迷宫大小设置", 'normal', Config.COLORS['PRIMARY'])
         size_title_rect = size_title.get_rect(center=(center_x, size_y))
         self.screen.blit(size_title, size_title_rect)
         
         # 当前大小显示
         size_display_y = size_y + 50
-        size_text = title_font.render(f"{self.selected_maze_size} × {self.selected_maze_size}", True, Config.COLORS['HIGHLIGHT'])
+        size_text = self._render_mixed_text(f"{self.selected_maze_size} × {self.selected_maze_size}", 'normal', Config.COLORS['HIGHLIGHT'])
         size_rect = size_text.get_rect(center=(center_x, size_display_y))
         self.screen.blit(size_text, size_rect)
         
         # 大小范围提示
-        range_text = self.small_font.render(f"范围: {Config.MIN_MAZE_SIZE} - {Config.MAX_MAZE_SIZE}", True, Config.COLORS['TEXT_SECONDARY'])
+        range_text = self._render_mixed_text(f"范围: {Config.MIN_MAZE_SIZE} - {Config.MAX_MAZE_SIZE}", 'small', Config.COLORS['TEXT_SECONDARY'])
         range_rect = range_text.get_rect(center=(center_x, size_display_y + 35))
         self.screen.blit(range_text, range_rect)
         
@@ -1240,7 +1358,7 @@ class GameUI:
         controls_y = size_display_y + 70
         
         # 控制说明标题
-        controls_title = self.font.render("🎯 控制说明", True, Config.COLORS['INFO'])
+        controls_title = self._render_mixed_text("🎯 控制说明", 'normal', Config.COLORS['INFO'])
         controls_title_rect = controls_title.get_rect(center=(center_x, controls_y))
         self.screen.blit(controls_title, controls_title_rect)
         
@@ -1255,12 +1373,12 @@ class GameUI:
             item_y = controls_y + 30 + i * 25
             
             # 绘制图标
-            icon_surface = self.small_font.render(icon, True, color)
+            icon_surface = self._render_mixed_text(icon, 'small', color)
             icon_rect = icon_surface.get_rect(center=(center_x - 80, item_y))
             self.screen.blit(icon_surface, icon_rect)
             
             # 绘制说明
-            desc_surface = self.small_font.render(desc, True, Config.COLORS['TEXT_PRIMARY'])
+            desc_surface = self._render_mixed_text(desc, 'small', Config.COLORS['TEXT_PRIMARY'])
             desc_rect = desc_surface.get_rect(center=(center_x + 20, item_y))
             self.screen.blit(desc_surface, desc_rect)
         
@@ -1268,7 +1386,7 @@ class GameUI:
         game_desc_y = panel_y + panel_height + 40
         
         # 游戏说明标题
-        game_title = self.font.render("🎯 游戏目标", True, Config.COLORS['WARNING'])
+        game_title = self._render_mixed_text("🎯 游戏目标", 'normal', Config.COLORS['WARNING'])
         game_title_rect = game_title.get_rect(center=(center_x, game_desc_y))
         self.screen.blit(game_title, game_title_rect)
         
@@ -1283,12 +1401,12 @@ class GameUI:
             item_y = game_desc_y + 30 + i * 25
             
             # 绘制图标
-            icon_surface = self.small_font.render(icon, True, color)
+            icon_surface = self._render_mixed_text(icon, 'small', color)
             icon_rect = icon_surface.get_rect(center=(center_x - 120, item_y))
             self.screen.blit(icon_surface, icon_rect)
             
             # 绘制说明
-            desc_surface = self.small_font.render(desc, True, Config.COLORS['TEXT_PRIMARY'])
+            desc_surface = self._render_mixed_text(desc, 'small', Config.COLORS['TEXT_PRIMARY'])
             desc_rect = desc_surface.get_rect(center=(center_x + 20, item_y))
             self.screen.blit(desc_surface, desc_rect)
     

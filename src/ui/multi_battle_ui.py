@@ -74,6 +74,108 @@ class MultiMonsterBattleUI:
         
         self._initialize_pygame()
     
+    def _render_mixed_text(self, text: str, font_size: str = 'normal', color=(255, 255, 255)) -> pygame.Surface:
+        """
+        渲染混合文本（emoji + 普通文字）
+        
+        Args:
+            text: 要渲染的文本
+            font_size: 字体大小 ('small', 'normal', 'title')
+            color: 文字颜色
+        
+        Returns:
+            渲染后的Surface
+        """
+        # 处理空文本
+        if not text or text.strip() == "":
+            # 选择合适的字体来获取高度
+            if font_size == 'small':
+                font_height = 14  # 默认小字体高度
+            elif font_size == 'title':
+                font_height = 24  # 默认标题字体高度
+            else:
+                font_height = 20  # 默认普通字体高度
+            return pygame.Surface((1, font_height), pygame.SRCALPHA)
+        
+        # 选择字体
+        if font_size == 'small':
+            text_font = self.small_font
+            emoji_font = self.emoji_small_font
+        elif font_size == 'title':
+            text_font = self.title_font
+            emoji_font = self.emoji_title_font
+        else:
+            text_font = self.font
+            emoji_font = self.emoji_font
+        
+        # 分离emoji和普通文字
+        parts = []
+        current_part = ""
+        is_emoji = False
+        
+        for char in text:
+            # 检查是否为emoji字符（简单判断：Unicode范围）
+            char_code = ord(char)
+            char_is_emoji = (
+                0x1F600 <= char_code <= 0x1F64F or  # 表情符号
+                0x1F300 <= char_code <= 0x1F5FF or  # 杂项符号
+                0x1F680 <= char_code <= 0x1F6FF or  # 交通和地图符号
+                0x1F700 <= char_code <= 0x1F77F or  # 炼金术符号
+                0x1F780 <= char_code <= 0x1F7FF or  # 几何形状扩展
+                0x1F800 <= char_code <= 0x1F8FF or  # 补充箭头-C
+                0x2600 <= char_code <= 0x26FF or   # 杂项符号
+                0x2700 <= char_code <= 0x27BF or   # 装饰符号
+                0xFE00 <= char_code <= 0xFE0F or   # 变体选择器
+                0x1F900 <= char_code <= 0x1F9FF     # 补充符号和象形文字
+            )
+            
+            if char_is_emoji != is_emoji:
+                if current_part:
+                    parts.append((current_part, is_emoji))
+                current_part = char
+                is_emoji = char_is_emoji
+            else:
+                current_part += char
+        
+        if current_part:
+            parts.append((current_part, is_emoji))
+        
+        # 如果没有分离出不同类型的文字，直接使用普通字体
+        if len(parts) == 1 and not parts[0][1]:
+            part_text = parts[0][0]
+            # 检查是否为不可见字符（如变体选择器）
+            if not part_text or part_text.strip() == "" or all(0xFE00 <= ord(c) <= 0xFE0F for c in part_text):
+                return pygame.Surface((1, 20), pygame.SRCALPHA)  # 默认高度
+            return text_font.render(text, True, color)
+        
+        # 渲染各部分并组合
+        surfaces = []
+        total_width = 0
+        max_height = 0
+        
+        for part_text, part_is_emoji in parts:
+            # 跳过空的段落或不可见字符（如变体选择器）
+            if not part_text or part_text.strip() == "" or all(0xFE00 <= ord(c) <= 0xFE0F for c in part_text):
+                continue
+            if part_is_emoji:
+                surface = emoji_font.render(part_text, True, color)
+            else:
+                surface = text_font.render(part_text, True, color)
+            surfaces.append(surface)
+            total_width += surface.get_width()
+            max_height = max(max_height, surface.get_height())
+        
+        # 创建组合Surface
+        combined_surface = pygame.Surface((total_width, max_height), pygame.SRCALPHA)
+        x_offset = 0
+        
+        for surface in surfaces:
+            y_offset = (max_height - surface.get_height()) // 2
+            combined_surface.blit(surface, (x_offset, y_offset))
+            x_offset += surface.get_width()
+        
+        return combined_surface
+    
     def _initialize_pygame(self):
         """初始化pygame组件"""
         pygame.init()
@@ -81,14 +183,26 @@ class MultiMonsterBattleUI:
         pygame.display.set_caption(f"多怪物战斗 - {self.scenario['name']}")
         self.clock = pygame.time.Clock()
         
+        # 初始化字体 - 分别为文字和emoji使用不同字体
         try:
-            self.font = pygame.font.Font('font/msyh.ttc', 20)
-            self.small_font = pygame.font.Font('font/msyh.ttc', 14)
-            self.title_font = pygame.font.Font('font/msyh.ttc', 24)
-        except:
+            # 文字字体
+            self.font = pygame.font.Font('d:/pycharm代码/algorithom/font/msyh.ttc', 20)
+            self.small_font = pygame.font.Font('d:/pycharm代码/algorithom/font/msyh.ttc', 14)
+            self.title_font = pygame.font.Font('d:/pycharm代码/algorithom/font/msyh.ttc', 24)
+            
+            # emoji字体
+            self.emoji_font = pygame.font.Font('d:/pycharm代码/algorithom/font/seguiemj.ttf', 20)
+            self.emoji_small_font = pygame.font.Font('d:/pycharm代码/algorithom/font/seguiemj.ttf', 14)
+            self.emoji_title_font = pygame.font.Font('d:/pycharm代码/algorithom/font/seguiemj.ttf', 24)
+        except Exception as e:
+            print(f"字体加载失败: {e}")
+            # 备用字体
             self.font = pygame.font.SysFont('Arial', 20)
             self.small_font = pygame.font.SysFont('Arial', 14)
             self.title_font = pygame.font.SysFont('Arial', 24)
+            self.emoji_font = pygame.font.SysFont('Arial', 20)
+            self.emoji_small_font = pygame.font.SysFont('Arial', 14)
+            self.emoji_title_font = pygame.font.SysFont('Arial', 24)
     
     def run(self) -> Dict:
         """运行战斗界面主循环"""
@@ -356,11 +470,11 @@ class MultiMonsterBattleUI:
         # 使用深色背景
         self.screen.fill(Config.COLORS['DARK_GRAY'])
         
-        # 渲染现代化标题
-        title_shadow = self.title_font.render(f"⚔️ 多怪物战斗 - {self.scenario['name']}", True, Config.COLORS['SHADOW'])
-        self.screen.blit(title_shadow, (12, 12))
-        title_text = self.title_font.render(f"⚔️ 多怪物战斗 - {self.scenario['name']}", True, Config.COLORS['PRIMARY'])
-        self.screen.blit(title_text, (10, 10))
+        # 标题阴影
+        title_shadow = self._render_mixed_text(f"⚔️ 多怪物战斗 - {self.scenario['name']}", 'title', Config.COLORS['SHADOW'])
+        self.screen.blit(title_shadow, (22, 12))
+        title_text = self._render_mixed_text(f"⚔️ 多怪物战斗 - {self.scenario['name']}", 'title', Config.COLORS['PRIMARY'])
+        self.screen.blit(title_text, (20, 10))
         
         # 渲染各个区域
         self._render_log_area()
@@ -394,7 +508,7 @@ class MultiMonsterBattleUI:
         pygame.draw.rect(self.screen, Config.COLORS['INFO'], title_rect)
         
         # 标题文字
-        log_title = self.font.render("📜 战斗日志", True, Config.COLORS['WHITE'])
+        log_title = self._render_mixed_text("📜 战斗日志", 'normal', Config.COLORS['WHITE'])
         title_text_rect = log_title.get_rect(center=(title_rect.centerx, title_rect.centery))
         self.screen.blit(log_title, title_text_rect)
         
@@ -411,7 +525,7 @@ class MultiMonsterBattleUI:
                 log_bg = pygame.Rect(self.log_area.x + 2, self.log_area.y + y_offset - 2, self.log_area.width - 4, 18)
                 pygame.draw.rect(self.screen, Config.COLORS['DARK_GRAY'], log_bg)
             
-            log_text = self.small_font.render(log, True, Config.COLORS['WHITE'])
+            log_text = self._render_mixed_text(log, 'small', Config.COLORS['WHITE'])
             self.screen.blit(log_text, (self.log_area.x + 8, self.log_area.y + y_offset))
             y_offset += 20
     
@@ -430,7 +544,7 @@ class MultiMonsterBattleUI:
         pygame.draw.rect(self.screen, Config.COLORS['WARNING'], title_rect)
         
         # 标题文字
-        skill_title = self.font.render("⚡ 技能面板", True, Config.COLORS['WHITE'])
+        skill_title = self._render_mixed_text("⚡ 技能面板", 'normal', Config.COLORS['WHITE'])
         title_text_rect = skill_title.get_rect(center=(title_rect.centerx, title_rect.centery))
         self.screen.blit(skill_title, title_text_rect)
         
@@ -473,7 +587,7 @@ class MultiMonsterBattleUI:
             skill_icons = {'普通攻击': '⚔️', '强力攻击': '💥', '治疗': '💚', '防御': '🛡️'}
             icon = skill_icons.get(skill_info['name'], '⚡')
             skill_text = f"{icon} {skill_info['name']} (CD: {skill_info.get('cooldown', 0)})"
-            text_surface = self.small_font.render(skill_text, True, text_color)
+            text_surface = self._render_mixed_text(skill_text, 'small', text_color)
             text_rect = text_surface.get_rect(center=button_rect.center)
             self.screen.blit(text_surface, text_rect)
             
@@ -496,17 +610,17 @@ class MultiMonsterBattleUI:
         pygame.draw.rect(self.screen, Config.COLORS['PRIMARY'], title_rect)
         
         # 玩家信息标题
-        player_title = self.font.render("🚶 玩家状态", True, Config.COLORS['WHITE'])
+        player_title = self._render_mixed_text("🚶 玩家状态", 'normal', Config.COLORS['WHITE'])
         title_text_rect = player_title.get_rect(center=(title_rect.centerx, title_rect.centery))
         self.screen.blit(player_title, title_text_rect)
         
         # 资源信息
         resource_text = f"💰 资源: {battle_state['player_resources']}"
-        resource_surface = self.small_font.render(resource_text, True, Config.COLORS['GOLD'])
+        resource_surface = self._render_mixed_text(resource_text, 'small', Config.COLORS['GOLD'])
         self.screen.blit(resource_surface, (self.player_area.x + 15, self.player_area.y + 35))
         
         turn_text = f"🔄 回合: {battle_state['turn_count']}"
-        turn_surface = self.small_font.render(turn_text, True, Config.COLORS['INFO'])
+        turn_surface = self._render_mixed_text(turn_text, 'small', Config.COLORS['INFO'])
         self.screen.blit(turn_surface, (self.player_area.x + 15, self.player_area.y + 55))
         
         # 现代化资源条
@@ -536,7 +650,7 @@ class MultiMonsterBattleUI:
         
         # 资源百分比文字
         percentage_text = f"{int(resource_percentage * 100)}%"
-        percentage_surface = self.small_font.render(percentage_text, True, Config.COLORS['WHITE'])
+        percentage_surface = self._render_mixed_text(percentage_text, 'small', Config.COLORS['WHITE'])
         percentage_rect = percentage_surface.get_rect(center=resource_bar_rect.center)
         self.screen.blit(percentage_surface, percentage_rect)
     
@@ -555,7 +669,7 @@ class MultiMonsterBattleUI:
         pygame.draw.rect(self.screen, Config.COLORS['DANGER'], title_rect)
         
         # 标题
-        monster_title = self.font.render("👹 敌方单位", True, Config.COLORS['WHITE'])
+        monster_title = self._render_mixed_text("👹 敌方单位", 'normal', Config.COLORS['WHITE'])
         title_text_rect = monster_title.get_rect(center=(title_rect.centerx, title_rect.centery))
         self.screen.blit(monster_title, title_text_rect)
         
@@ -602,12 +716,12 @@ class MultiMonsterBattleUI:
             
             # 怪物名称和图标
             name_text = f"{icon} {monster['name']} #{monster['id']}"
-            name_surface = self.small_font.render(name_text, True, Config.COLORS['WHITE'])
+            name_surface = self._render_mixed_text(name_text, 'small', Config.COLORS['WHITE'])
             self.screen.blit(name_surface, (monster_rect.x + 8, monster_rect.y + 5))
             
             # HP信息
             hp_text = f"❤️ {monster['current_hp']}/{monster['max_hp']}"
-            hp_surface = self.small_font.render(hp_text, True, Config.COLORS['WHITE'])
+            hp_surface = self._render_mixed_text(hp_text, 'small', Config.COLORS['WHITE'])
             self.screen.blit(hp_surface, (monster_rect.x + 8, monster_rect.y + 22))
             
             # 现代化血量条
@@ -642,7 +756,7 @@ class MultiMonsterBattleUI:
                 status_text = "💀 已死亡"
                 status_color = Config.COLORS['DANGER']
             
-            status_surface = self.small_font.render(status_text, True, status_color)
+            status_surface = self._render_mixed_text(status_text, 'small', status_color)
             self.screen.blit(status_surface, (monster_rect.x + 240, monster_rect.y + 22))
             
             y_offset += 65
@@ -665,13 +779,13 @@ class MultiMonsterBattleUI:
         
         # 标题
         skill_name = Config.SKILLS[self.selected_skill]['name']
-        title_text = self.font.render(f"🎯 选择目标 - {skill_name}", True, Config.COLORS['WHITE'])
+        title_text = self._render_mixed_text(f"🎯 选择目标 - {skill_name}", 'normal', Config.COLORS['WHITE'])
         title_text_rect = title_text.get_rect(center=(title_rect.centerx, title_rect.centery))
         self.screen.blit(title_text, title_text_rect)
         
         # 提示文本
         hint_text = "💡 点击上方怪物选择目标，然后点击确认"
-        hint_surface = self.small_font.render(hint_text, True, Config.COLORS['INFO'])
+        hint_surface = self._render_mixed_text(hint_text, 'small', Config.COLORS['INFO'])
         self.screen.blit(hint_surface, (self.target_selection_area.x + 15, self.target_selection_area.y + 35))
         
         # 选中的目标信息
@@ -680,7 +794,7 @@ class MultiMonsterBattleUI:
             target_monster = next((m for m in battle_state['monsters'] if m['id'] == self.selected_target), None)
             if target_monster:
                 target_text = f"✅ 已选中: {target_monster['name']} (❤️ {target_monster['current_hp']}/{target_monster['max_hp']})"
-                target_surface = self.small_font.render(target_text, True, Config.COLORS['SUCCESS'])
+                target_surface = self._render_mixed_text(target_text, 'small', Config.COLORS['SUCCESS'])
                 self.screen.blit(target_surface, (self.target_selection_area.x + 15, self.target_selection_area.y + 55))
         
         # 现代化按钮
@@ -701,7 +815,7 @@ class MultiMonsterBattleUI:
             
         pygame.draw.rect(self.screen, confirm_color, self.confirm_button)
         pygame.draw.rect(self.screen, confirm_border, self.confirm_button, 2)
-        confirm_text = self.small_font.render("✅ 确认", True, confirm_text_color)
+        confirm_text = self._render_mixed_text("✅ 确认", 'small', confirm_text_color)
         confirm_rect = confirm_text.get_rect(center=self.confirm_button.center)
         self.screen.blit(confirm_text, confirm_rect)
         
@@ -713,7 +827,7 @@ class MultiMonsterBattleUI:
         # 取消按钮
         pygame.draw.rect(self.screen, Config.COLORS['DANGER'], self.cancel_button)
         pygame.draw.rect(self.screen, Config.COLORS['DANGER'], self.cancel_button, 2)
-        cancel_text = self.small_font.render("❌ 取消", True, Config.COLORS['WHITE'])
+        cancel_text = self._render_mixed_text("❌ 取消", 'small', Config.COLORS['WHITE'])
         cancel_rect = cancel_text.get_rect(center=self.cancel_button.center)
         self.screen.blit(cancel_text, cancel_rect)
     
@@ -732,7 +846,7 @@ class MultiMonsterBattleUI:
         pygame.draw.rect(self.screen, Config.COLORS['PRIMARY'], self.strategy_button, 2)
         
         # 按钮文字
-        button_text = self.small_font.render("🧠 BOSS战策略优化", True, Config.COLORS['WHITE'])
+        button_text = self._render_mixed_text("🧠 BOSS战策略优化", 'small', Config.COLORS['WHITE'])
         text_rect = button_text.get_rect(center=self.strategy_button.center)
         self.screen.blit(button_text, text_rect)
     
@@ -762,8 +876,8 @@ class MultiMonsterBattleUI:
         title_bar = pygame.Rect(result_rect.x, result_rect.y, result_rect.width, 40)
         pygame.draw.rect(self.screen, Config.COLORS['SUCCESS'], title_bar)
         
-        # 标题（固定位置）
-        title_text = self.title_font.render("🎯 BOSS战策略优化结果", True, Config.COLORS['WHITE'])
+        # 标题
+        title_text = self._render_mixed_text("🎯 BOSS战策略优化结果", 'title', Config.COLORS['WHITE'])
         title_rect = title_text.get_rect(center=(title_bar.centerx, title_bar.centery))
         self.screen.blit(title_text, title_rect)
         
@@ -775,7 +889,7 @@ class MultiMonsterBattleUI:
         
         if self.optimal_strategy:
             # 最优策略信息
-            strategy_title = self.font.render(f"最优技能序列 (共{len(self.optimal_strategy)}回合):", True, Config.COLORS['YELLOW'])
+            strategy_title = self._render_mixed_text(f"最优技能序列 (共{len(self.optimal_strategy)}回合):", 'normal', Config.COLORS['YELLOW'])
             content_surface.blit(strategy_title, (10, y_offset))
             y_offset += 40
             
@@ -785,7 +899,7 @@ class MultiMonsterBattleUI:
                 
                 # 基本技能信息
                 skill_text = f"{i+1}. {skill_info['name']} (伤害: {skill_info.get('damage', 0)}, 冷却: {skill_info.get('cooldown', 0)}回合)"
-                skill_surface = self.small_font.render(skill_text, True, Config.COLORS['WHITE'])
+                skill_surface = self._render_mixed_text(skill_text, 'small', Config.COLORS['WHITE'])
                 content_surface.blit(skill_surface, (30, y_offset))
                 y_offset += 20
                 
@@ -793,21 +907,21 @@ class MultiMonsterBattleUI:
                 if i in self.monster_targets:
                     target_info = self.monster_targets[i]
                     target_text = f"   → 攻击目标: {target_info['monster_name']} (ID: {target_info['monster_id']}) 剩余血量: {target_info['remaining_hp']}"
-                    target_surface = self.small_font.render(target_text, True, Config.COLORS['YELLOW'])
+                    target_surface = self._render_mixed_text(target_text, 'small', Config.COLORS['YELLOW'])
                     content_surface.blit(target_surface, (30, y_offset))
                     y_offset += 20
                 else:
                     y_offset += 5
         else:
             # 无解情况
-            no_solution_text = self.font.render("在当前条件下无法找到可行的策略", True, Config.COLORS['RED'])
+            no_solution_text = self._render_mixed_text("在当前条件下无法找到可行的策略", 'normal', Config.COLORS['RED'])
             content_surface.blit(no_solution_text, (10, y_offset))
             y_offset += 40
         
         # 统计信息
         if self.strategy_stats:
             y_offset += 20
-            stats_title = self.font.render("算法统计信息:", True, Config.COLORS['YELLOW'])
+            stats_title = self._render_mixed_text("算法统计信息:", 'normal', Config.COLORS['YELLOW'])
             content_surface.blit(stats_title, (10, y_offset))
             y_offset += 30
             
@@ -831,7 +945,7 @@ class MultiMonsterBattleUI:
                 stats_info.append(score_text)
             
             for stat in stats_info:
-                stat_surface = self.small_font.render(stat, True, Config.COLORS['WHITE'])
+                stat_surface = self._render_mixed_text(stat, 'small', Config.COLORS['WHITE'])
                 content_surface.blit(stat_surface, (30, y_offset))
                 y_offset += 25
         
@@ -867,8 +981,8 @@ class MultiMonsterBattleUI:
         
         # 关闭提示和滚动提示（固定位置）
         if self.max_scroll_offset > 0:
-            hint_text = self.small_font.render("⌨️ 按ESC关闭 | 🖱️ 滚轮滚动", True, Config.COLORS['WHITE'])
+            hint_text = self._render_mixed_text("⌨️ 按ESC关闭 | 🖱️ 滚轮滚动", 'small', Config.COLORS['WHITE'])
         else:
-            hint_text = self.small_font.render("⌨️ 按ESC键关闭", True, Config.COLORS['WHITE'])
+            hint_text = self._render_mixed_text("⌨️ 按ESC键关闭", 'small', Config.COLORS['WHITE'])
         hint_rect = hint_text.get_rect(center=(hint_bg.centerx, hint_bg.centery))
         self.screen.blit(hint_text, hint_rect)

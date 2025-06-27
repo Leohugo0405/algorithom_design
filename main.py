@@ -33,7 +33,10 @@ def main():
             game_ui.run()
 
         except Exception as e:
+            import traceback
             print(f"游戏运行出错: {e}")
+            print("详细错误信息:")
+            traceback.print_exc()
         finally:
             pygame.quit()
 
