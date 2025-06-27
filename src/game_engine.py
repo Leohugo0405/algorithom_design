@@ -14,6 +14,7 @@ from .algorithms.path_planning import PathPlanner
 from .algorithms.greedy_strategy import GreedyStrategy
 from .algorithms.puzzle_solver import PuzzleSolver
 from .algorithms.boss_strategy import BossStrategy
+from .algorithms.resource_path_planner import ResourcePathPlanner
 from .battle.multi_monster_battle import MultiMonsterBattle
 
 class GameEngine:
@@ -40,6 +41,7 @@ class GameEngine:
         self.greedy_strategy = None
         self.puzzle_solver = PuzzleSolver()
         self.boss_strategy = None
+        self.resource_path_planner = None
         
         # 游戏状态（移除玩家血量）
         self.player_resources = 100
@@ -101,6 +103,7 @@ class GameEngine:
         self.path_planner = PathPlanner(self.maze)
         self.greedy_strategy = GreedyStrategy(self.maze)
         self.boss_strategy = BossStrategy()
+        self.resource_path_planner = ResourcePathPlanner(self.maze)
         
         # 重置游戏状态
         self._reset_game_state()
@@ -1176,3 +1179,230 @@ class GameEngine:
                 return {'success': False, 'message': f'导出失败: {str(e)}'}
         else:
             return {'success': False, 'message': '迷宫未生成'}
+    
+    # ==================== 资源路径规划功能 ====================
+    
+    def find_optimal_resource_path(self, max_resources: int = None) -> Dict:
+        """
+        找到从当前位置到终点的最优资源收集路径
+        
+        Args:
+            max_resources: 最大收集资源数量限制
+        
+        Returns:
+            Dict: 最优路径结果
+        """
+        if not self.resource_path_planner:
+            return {
+                'success': False,
+                'message': '资源路径规划器未初始化',
+                'path': [],
+                'total_value': 0
+            }
+        
+        # 临时更新起点为当前玩家位置
+        original_start = self.resource_path_planner.start_pos
+        self.resource_path_planner.start_pos = self.player_pos
+        
+        try:
+            result = self.resource_path_planner.find_optimal_resource_path(max_resources)
+            return result
+        finally:
+            # 恢复原始起点
+            self.resource_path_planner.start_pos = original_start
+    
+    def get_auto_navigation_to_exit(self) -> Dict:
+        """
+        获取从当前位置到出口的自动导航路径
+        
+        Returns:
+            Dict: 导航结果
+        """
+        if not self.resource_path_planner:
+            return {
+                'success': False,
+                'message': '资源路径规划器未初始化',
+                'steps': []
+            }
+        
+        # 使用A*算法找到最短路径
+        path = self.resource_path_planner._a_star_path(self.player_pos, self.exit_pos)
+        
+        if not path:
+            return {
+                'success': False,
+                'message': '无法找到到达出口的路径',
+                'steps': []
+            }
+        
+        # 获取导航步骤
+        steps = self.resource_path_planner.get_auto_navigation_steps(path, self.player_pos)
+        
+        return {
+            'success': True,
+            'path': path,
+            'steps': steps,
+            'total_steps': len(steps),
+            'message': f'找到到达出口的路径，共需{len(steps)}步'
+        }
+    
+    def get_auto_navigation_to_nearest_resource(self) -> Dict:
+        """
+        获取到最近资源的自动导航路径
+        
+        Returns:
+            Dict: 导航结果
+        """
+        if not self.resource_path_planner:
+            return {
+                'success': False,
+                'message': '资源路径规划器未初始化',
+                'steps': []
+            }
+        
+        # 找到所有未收集的资源
+        available_resources = []
+        for resource in self.resource_path_planner.resources:
+            pos = resource['position']
+            if pos not in self.collected_items and resource['value'] > 0:  # 只考虑正价值资源
+                available_resources.append(resource)
+        
+        if not available_resources:
+            return {
+                'success': False,
+                'message': '没有可收集的资源',
+                'steps': []
+            }
+        
+        # 找到最近的资源
+        nearest_resource = min(available_resources, 
+                             key=lambda r: self.resource_path_planner._manhattan_distance(
+                                 self.player_pos, r['position']))
+        
+        target_pos = nearest_resource['position']
+        path = self.resource_path_planner._a_star_path(self.player_pos, target_pos)
+        
+        if not path:
+            return {
+                'success': False,
+                'message': f'无法到达资源位置 {target_pos}',
+                'steps': []
+            }
+        
+        steps = self.resource_path_planner.get_auto_navigation_steps(path, self.player_pos)
+        
+        return {
+            'success': True,
+            'path': path,
+            'steps': steps,
+            'target_resource': nearest_resource,
+            'total_steps': len(steps),
+            'message': f'找到最近资源路径，共需{len(steps)}步'
+        }
+    
+    def get_resource_path_alternatives(self, num_alternatives: int = 3) -> List[Dict]:
+        """
+        获取多个资源收集路径方案
+        
+        Args:
+            num_alternatives: 备选方案数量
+        
+        Returns:
+            List[Dict]: 备选路径列表
+        """
+        if not self.resource_path_planner:
+            return []
+        
+        # 临时更新起点为当前玩家位置
+        original_start = self.resource_path_planner.start_pos
+        self.resource_path_planner.start_pos = self.player_pos
+        
+        try:
+            alternatives = self.resource_path_planner.get_alternative_paths(num_alternatives)
+            
+            # 为每个方案添加导航步骤
+            for alt in alternatives:
+                if alt.get('success') and alt.get('path'):
+                    steps = self.resource_path_planner.get_auto_navigation_steps(
+                        alt['path'], self.player_pos)
+                    alt['navigation_steps'] = steps
+                    alt['total_steps'] = len(steps)
+            
+            return alternatives
+        finally:
+            # 恢复原始起点
+            self.resource_path_planner.start_pos = original_start
+    
+    def analyze_current_path_efficiency(self) -> Dict:
+        """
+        分析当前玩家路径的效率
+        
+        Returns:
+            Dict: 路径效率分析
+        """
+        if not self.resource_path_planner:
+            return {
+                'success': False,
+                'message': '资源路径规划器未初始化'
+            }
+        
+        # 构建玩家已走过的路径（简化版本）
+        player_path = [self.start_pos, self.player_pos] if self.start_pos and self.player_pos else []
+        
+        if len(player_path) < 2:
+            return {
+                'success': False,
+                'message': '路径数据不足'
+            }
+        
+        analysis = self.resource_path_planner.analyze_path_efficiency(player_path)
+        
+        # 添加游戏状态信息
+        analysis.update({
+            'success': True,
+            'current_resources': self.player_resources,
+            'items_collected': len(self.collected_items),
+            'moves_made': self.moves_count,
+            'actual_value_collected': self.total_value_collected
+        })
+        
+        return analysis
+    
+    def execute_auto_navigation(self, steps: List[str]) -> Dict:
+        """
+        执行自动导航步骤
+        
+        Args:
+            steps: 移动步骤列表
+        
+        Returns:
+            Dict: 执行结果
+        """
+        if not steps:
+            return {
+                'success': False,
+                'message': '没有导航步骤',
+                'executed_steps': 0
+            }
+        
+        executed_steps = 0
+        results = []
+        
+        for step in steps:
+            result = self.move_player(step)
+            results.append(result)
+            
+            if result['success']:
+                executed_steps += 1
+            else:
+                # 遇到障碍或错误，停止执行
+                break
+        
+        return {
+            'success': executed_steps > 0,
+            'executed_steps': executed_steps,
+            'total_steps': len(steps),
+            'final_position': self.player_pos,
+            'step_results': results,
+            'message': f'成功执行{executed_steps}/{len(steps)}步导航'
+        }

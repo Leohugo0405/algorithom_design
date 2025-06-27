@@ -50,6 +50,8 @@ class GameUI:
         # 路径显示
         self.optimal_path = []
         self.greedy_path = []
+        self.alternative_paths = []  # 多路径方案
+        self.show_alternative_paths = False  # 是否显示多路径方案
         
         # 消息系统
         self.messages = []
@@ -223,6 +225,31 @@ class GameUI:
         elif key == pygame.K_c:
             # 比较路径策略
             self._compare_path_strategies()
+        
+        elif key == pygame.K_p:
+            # 显示资源路径规划
+            self._show_resource_path_planning()
+        
+        elif key == pygame.K_n:
+            # 自动导航到最近资源
+            self._auto_navigate_to_nearest_resource()
+        
+        elif key == pygame.K_e:
+            # 自动导航到出口
+            self._auto_navigate_to_exit()
+        
+        elif key == pygame.K_m:
+            # 显示多个路径方案
+            self._show_path_alternatives()
+        
+        elif key == pygame.K_v:
+            # 切换多路径方案显示
+            if self.alternative_paths:
+                self.show_alternative_paths = not self.show_alternative_paths
+                status = "开启" if self.show_alternative_paths else "关闭"
+                self.add_message(f"多路径方案显示已{status}")
+            else:
+                self.add_message("请先按M键生成路径方案")
         
         elif key == pygame.K_RETURN or key == pygame.K_KP_ENTER:
             # Enter键交互
@@ -443,11 +470,16 @@ class GameUI:
         self._render_maze()
         
         # 渲染路径
-        if self.show_optimal_path and self.optimal_path:
-            self._render_path(self.optimal_path, Config.COLORS['BLUE'], 2)
-        
-        if self.show_greedy_path and self.greedy_path:
-            self._render_path(self.greedy_path, Config.COLORS['GREEN'], 2)
+        if self.show_alternative_paths and self.alternative_paths:
+            # 绘制多路径方案
+            self._render_alternative_paths()
+        else:
+            # 绘制传统路径
+            if self.show_optimal_path and self.optimal_path:
+                self._render_path(self.optimal_path, Config.COLORS['BLUE'], 2)
+            
+            if self.show_greedy_path and self.greedy_path:
+                self._render_path(self.greedy_path, Config.COLORS['GREEN'], 2)
         
         # 渲染玩家
         self._render_player()
@@ -529,6 +561,120 @@ class GameUI:
         
         if len(points) > 1:
             pygame.draw.lines(self.screen, color, False, points, width)
+    
+    def _render_alternative_paths(self):
+        """
+        渲染多个备选路径方案
+        """
+        if not self.alternative_paths:
+            return
+        
+        # 定义不同路径的颜色和样式
+        path_colors = [
+            (Config.COLORS['BLUE'], 3),      # 方案1：蓝色，粗线
+            (Config.COLORS['GREEN'], 3),     # 方案2：绿色，粗线
+            (Config.COLORS['RED'], 3),       # 方案3：红色，粗线
+            (Config.COLORS['PURPLE'], 2),    # 方案4：紫色，中线
+            (Config.COLORS['ORANGE'], 2),    # 方案5：橙色，中线
+        ]
+        
+        maze_size = self.game_engine.maze_size
+        maze_area_width = min(600, Config.WINDOW_WIDTH - 400)
+        maze_area_height = min(600, Config.WINDOW_HEIGHT - 100)
+        cell_size = min(maze_area_width // maze_size, maze_area_height // maze_size)
+        start_x = 50
+        start_y = 50
+        
+        # 绘制每个路径方案
+        for i, alt in enumerate(self.alternative_paths):
+            if not alt.get('success') or not alt.get('path'):
+                continue
+            
+            path = alt['path']
+            if i < len(path_colors):
+                color, width = path_colors[i]
+            else:
+                color, width = Config.COLORS['GRAY'], 2
+            
+            # 绘制路径线条
+            self._render_path(path, color, width)
+            
+            # 绘制路径起点和终点标记
+            if len(path) >= 2:
+                # 起点标记
+                start_i, start_j = path[0]
+                start_x_pos = start_x + start_j * cell_size + cell_size // 2
+                start_y_pos = start_y + start_i * cell_size + cell_size // 2
+                pygame.draw.circle(self.screen, color, (start_x_pos, start_y_pos), cell_size // 4, 2)
+                
+                # 终点标记
+                end_i, end_j = path[-1]
+                end_x_pos = start_x + end_j * cell_size + cell_size // 2
+                end_y_pos = start_y + end_i * cell_size + cell_size // 2
+                pygame.draw.rect(self.screen, color, 
+                               (end_x_pos - cell_size//4, end_y_pos - cell_size//4, 
+                                cell_size//2, cell_size//2), 2)
+            
+            # 绘制资源收集点
+            resources_collected = alt.get('resources_collected', [])
+            for resource in resources_collected:
+                if 'position' in resource:
+                    res_i, res_j = resource['position']
+                    res_x = start_x + res_j * cell_size + cell_size // 2
+                    res_y = start_y + res_i * cell_size + cell_size // 2
+                    # 绘制资源收集标记（小圆圈）
+                    pygame.draw.circle(self.screen, color, (res_x, res_y), cell_size // 6, 2)
+        
+        # 绘制路径图例
+        self._render_path_legend()
+    
+    def _render_path_legend(self):
+        """
+        绘制路径图例
+        """
+        legend_x = Config.WINDOW_WIDTH - 340
+        legend_y = 400
+        legend_width = 320
+        legend_height = min(150, 30 + len(self.alternative_paths) * 25)
+        
+        # 绘制图例背景
+        pygame.draw.rect(self.screen, Config.COLORS['BLACK'], 
+                        (legend_x, legend_y, legend_width, legend_height))
+        pygame.draw.rect(self.screen, Config.COLORS['WHITE'], 
+                        (legend_x, legend_y, legend_width, legend_height), 2)
+        
+        # 绘制标题
+        title = self.font.render("路径方案图例", True, Config.COLORS['WHITE'])
+        self.screen.blit(title, (legend_x + 10, legend_y + 5))
+        
+        # 绘制每个路径的图例
+        path_colors = [
+            (Config.COLORS['BLUE'], "蓝色"),
+            (Config.COLORS['GREEN'], "绿色"),
+            (Config.COLORS['RED'], "红色"),
+            (Config.COLORS['PURPLE'], "紫色"),
+            (Config.COLORS['ORANGE'], "橙色"),
+        ]
+        
+        for i, alt in enumerate(self.alternative_paths[:5]):  # 最多显示5个
+            if not alt.get('success'):
+                continue
+            
+            y_offset = legend_y + 30 + i * 25
+            
+            # 绘制颜色线条
+            if i < len(path_colors):
+                color, color_name = path_colors[i]
+                pygame.draw.line(self.screen, color, 
+                               (legend_x + 10, y_offset + 8), 
+                               (legend_x + 30, y_offset + 8), 3)
+            
+            # 绘制路径信息
+            name = alt.get('name', f'方案{i+1}')
+            value = alt.get('total_value', 0)
+            text = f"{name} (价值:{value})"
+            text_surface = self.small_font.render(text, True, Config.COLORS['WHITE'])
+            self.screen.blit(text_surface, (legend_x + 40, y_offset))
     
     def _render_player(self):
         """
@@ -668,7 +814,7 @@ class GameUI:
             int: 下一个面板的y坐标
         """
         # 面板背景
-        panel_height = 200
+        panel_height = 180
         pygame.draw.rect(self.screen, Config.COLORS['GRAY'], (x, y, 300, panel_height))
         pygame.draw.rect(self.screen, Config.COLORS['BLACK'], (x, y, 300, panel_height), 2)
         
@@ -679,17 +825,15 @@ class GameUI:
         # 控制说明
         controls_text = [
             "WASD/方向键: 移动",
-            "ENTER: 与特殊方格交互",
-            "A: 3x3自动拾取开/关",
-            "O: 显示最优路径",
-            "G: 显示贪心路径",
+            "ENTER: 交互",
+            "A: 自动拾取",
+            "M: 多路径方案",
+            "V: 切换路径显示",
+            "P: 资源路径规划",
             "C: 比较路径策略",
             "R: 重新开始",
             "SPACE: 暂停/继续",
-            "S: 统计信息开/关",
             "H: 帮助开/关",
-            "I: 算法信息开/关",
-            "D: 动态规划分析",
             "ESC: 退出游戏"
         ]
         
@@ -803,6 +947,109 @@ class GameUI:
             desc_text = self.small_font.render(desc, True, Config.COLORS['YELLOW'])
             desc_rect = desc_text.get_rect(center=(Config.WINDOW_WIDTH // 2, 450 + i * 25))
             self.screen.blit(desc_text, desc_rect)
+    
+    # ==================== 资源路径规划UI功能 ====================
+    
+    def _show_resource_path_planning(self):
+        """
+        显示资源路径规划信息
+        """
+        if not self.game_started or self.game_completed:
+            self.add_message("游戏未开始或已结束")
+            return
+        
+        result = self.game_engine.find_optimal_resource_path()
+        
+        if result['success']:
+            self.add_message(f"最优资源路径: 总价值{result['total_value']}")
+            self.add_message(f"路径长度: {len(result['path'])}步")
+            self.add_message(f"收集资源: {len(result['resources_collected'])}个")
+            
+            # 保存路径用于显示
+            self.optimal_path = result['path']
+            self.show_optimal_path = True
+        else:
+            self.add_message(f"路径规划失败: {result['message']}")
+    
+    def _auto_navigate_to_nearest_resource(self):
+        """
+        自动导航到最近的资源
+        """
+        if not self.game_started or self.game_completed or self.paused:
+            self.add_message("游戏未开始、已结束或已暂停")
+            return
+        
+        result = self.game_engine.get_auto_navigation_to_nearest_resource()
+        
+        if result['success']:
+            self.add_message(f"找到最近资源，距离{result['total_steps']}步")
+            resource_type = result['target_resource']['type']
+            resource_value = result['target_resource']['value']
+            self.add_message(f"目标: {resource_type} (价值{resource_value})")
+            
+            # 执行自动导航
+            nav_result = self.game_engine.execute_auto_navigation(result['steps'])
+            if nav_result['success']:
+                self.add_message(f"自动导航完成: {nav_result['executed_steps']}/{nav_result['total_steps']}步")
+            else:
+                self.add_message(f"导航失败: {nav_result['message']}")
+        else:
+            self.add_message(f"导航失败: {result['message']}")
+    
+    def _auto_navigate_to_exit(self):
+        """
+        自动导航到出口
+        """
+        if not self.game_started or self.game_completed or self.paused:
+            self.add_message("游戏未开始、已结束或已暂停")
+            return
+        
+        result = self.game_engine.get_auto_navigation_to_exit()
+        
+        if result['success']:
+            self.add_message(f"找到出口路径，距离{result['total_steps']}步")
+            
+            # 执行自动导航
+            nav_result = self.game_engine.execute_auto_navigation(result['steps'])
+            if nav_result['success']:
+                self.add_message(f"自动导航完成: {nav_result['executed_steps']}/{nav_result['total_steps']}步")
+                # 检查是否到达出口
+                if self.game_engine.player_pos == self.game_engine.exit_pos:
+                    self.add_message("🎉 恭喜！你已到达出口，游戏结束！")
+                    self.game_completed = True
+            else:
+                self.add_message(f"导航失败: {nav_result['message']}")
+        else:
+            self.add_message(f"导航失败: {result['message']}")
+    
+    def _show_path_alternatives(self):
+        """
+        显示多个路径方案
+        """
+        if not self.game_started or self.game_completed:
+            self.add_message("游戏未开始或已结束")
+            return
+        
+        alternatives = self.game_engine.get_resource_path_alternatives(3)
+        
+        if alternatives:
+            # 存储路径方案用于可视化
+            self.alternative_paths = alternatives
+            self.show_alternative_paths = True
+            
+            self.add_message("=== 路径方案对比 ===")
+            self.add_message("路径已在迷宫中显示，按V键切换显示")
+            for i, alt in enumerate(alternatives, 1):
+                if alt.get('success'):
+                    name = alt.get('name', f'方案{i}')
+                    value = alt.get('total_value', 0)
+                    steps = alt.get('total_steps', len(alt.get('path', [])))
+                    resources = len(alt.get('resources_collected', []))
+                    
+                    self.add_message(f"{i}. {name}")
+                    self.add_message(f"   价值:{value} 步数:{steps} 资源:{resources}")
+        else:
+            self.add_message("无可用路径方案")
         
         # 注意：显示更新在主循环中统一处理
     
