@@ -23,23 +23,23 @@ def main():
         # 开始游戏
         pygame.init()
         try:
-            # 创建游戏引擎
+            # 创建游戏引擎（不指定迷宫大小，由UI设置界面控制）
             game_engine = GameEngine()
-                
+
             # 创建游戏UI
             game_ui = GameUI(game_engine)
-                
+
             # 运行游戏
             game_ui.run()
-                
+
         except Exception as e:
             print(f"游戏运行出错: {e}")
         finally:
             pygame.quit()
-        
-        
-        
-    
+
+
+
+
         sys.exit()
 
 if __name__ == "__main__":

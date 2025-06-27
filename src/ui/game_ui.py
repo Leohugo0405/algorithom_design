@@ -38,6 +38,8 @@ class GameUI:
         self.show_greedy_path = False
 
         self.game_completed = False  # 游戏是否已结束
+        self.show_settings = True  # 显示设置界面
+        self.game_started = False  # 游戏是否已开始
 
         # 显示面板
         self.show_statistics = True
@@ -52,6 +54,9 @@ class GameUI:
         # 消息系统
         self.messages = []
         self.max_messages = 5
+        
+        # 迷宫大小设置
+        self.selected_maze_size = Config.DEFAULT_MAZE_SIZE
         
         # 初始化pygame
         self._initialize_pygame()
@@ -81,26 +86,23 @@ class GameUI:
         """
         运行游戏主循环
         """
-        # 初始化游戏
-        init_result = self.game_engine.initialize_game()
-        if init_result['success']:
-            self.add_message("游戏初始化成功！")
-            self.add_message(f"迷宫大小: {init_result['maze_size']}x{init_result['maze_size']}")
-        else:
-            self.add_message("游戏初始化失败！")
-            return
-        
         # 主游戏循环
         while self.running:
-            # current_time = pygame.time.get_ticks()
-            
             # 处理事件
             self._handle_events()
             
-
+            # 如果显示设置界面
+            if self.show_settings:
+                self._draw_settings_screen()
+            # 游戏已开始，渲染游戏界面
+            elif self.game_started:
+                self._render()
+            # 如果游戏还未开始且不显示设置界面，显示空白屏幕等待初始化
+            else:
+                self.screen.fill(Config.COLORS['BLACK'])
             
-            # 渲染游戏
-            self._render()
+            # 更新显示
+            pygame.display.flip()
             
             # 控制帧率
             self.clock.tick(Config.FPS)
@@ -130,6 +132,32 @@ class GameUI:
         Args:
             key: 按下的键
         """
+        if self.show_settings and not self.game_started:
+            # 设置界面的按键处理
+            if key == pygame.K_ESCAPE:
+                self.running = False
+            elif key == pygame.K_RETURN or key == pygame.K_KP_ENTER:
+                # 开始游戏
+                self.show_settings = False
+                # 立即初始化游戏
+                init_result = self.game_engine.initialize_game(self.selected_maze_size)
+                if init_result['success']:
+                    self.add_message("游戏初始化成功！")
+                    self.add_message(f"迷宫大小: {init_result['maze_size']}x{init_result['maze_size']}")
+                    self.game_started = True
+                else:
+                    self.add_message("游戏初始化失败！")
+                    self.show_settings = True  # 如果初始化失败，返回设置界面
+            elif key == pygame.K_UP:
+                # 增加迷宫大小
+                if self.selected_maze_size < Config.MAX_MAZE_SIZE:
+                    self.selected_maze_size += 2  # 保持奇数
+            elif key == pygame.K_DOWN:
+                # 减少迷宫大小
+                if self.selected_maze_size > Config.MIN_MAZE_SIZE:
+                    self.selected_maze_size -= 2  # 保持奇数
+            return
+        
         if key == pygame.K_ESCAPE:
             self.running = False
         
@@ -139,12 +167,13 @@ class GameUI:
         
         elif key == pygame.K_r:
             # 重新开始游戏
-            init_result = self.game_engine.initialize_game()
-            if init_result['success']:
-                self.add_message("游戏重新开始！")
-                self.optimal_path = []
-                self.greedy_path = []
-                self.game_completed = False  # 重置游戏结束标志
+            self.show_settings = True
+            self.game_started = False
+            self.game_engine.maze = None
+            self.optimal_path = []
+            self.greedy_path = []
+            self.game_completed = False  # 重置游戏结束标志
+            self.messages = []
         elif key == pygame.K_o:
             # 显示/隐藏最优路径
             self.show_optimal_path = not self.show_optimal_path
@@ -728,6 +757,54 @@ class GameUI:
         for i, message in enumerate(self.messages[-self.max_messages:]):
             text_surface = self.small_font.render(message, True, Config.COLORS['WHITE'])
             self.screen.blit(text_surface, (x + 10, y + 35 + i * 15))
+    
+    def _draw_settings_screen(self):
+        """
+        绘制设置界面
+        """
+        # 清空屏幕
+        self.screen.fill(Config.COLORS['BLACK'])
+        
+        # 标题
+        title = self.font.render("迷宫探险游戏 - 设置", True, Config.COLORS['WHITE'])
+        title_rect = title.get_rect(center=(Config.WINDOW_WIDTH // 2, 100))
+        self.screen.blit(title, title_rect)
+        
+        # 迷宫大小设置
+        size_text = self.font.render(f"迷宫大小: {self.selected_maze_size} x {self.selected_maze_size}", True, Config.COLORS['WHITE'])
+        size_rect = size_text.get_rect(center=(Config.WINDOW_WIDTH // 2, 200))
+        self.screen.blit(size_text, size_rect)
+        
+        # 大小范围提示
+        range_text = self.small_font.render(f"范围: {Config.MIN_MAZE_SIZE} - {Config.MAX_MAZE_SIZE}", True, Config.COLORS['GRAY'])
+        range_rect = range_text.get_rect(center=(Config.WINDOW_WIDTH // 2, 230))
+        self.screen.blit(range_text, range_rect)
+        
+        # 控制说明
+        controls = [
+            "↑/↓ 键: 调整迷宫大小",
+            "回车键: 开始游戏",
+            "ESC键: 退出游戏"
+        ]
+        
+        for i, control in enumerate(controls):
+            control_text = self.small_font.render(control, True, Config.COLORS['WHITE'])
+            control_rect = control_text.get_rect(center=(Config.WINDOW_WIDTH // 2, 300 + i * 30))
+            self.screen.blit(control_text, control_rect)
+        
+        # 游戏说明
+        description = [
+            "游戏目标: 从起点(S)到达终点(E)",
+            "收集金币(G), 避开陷阱(T)",
+            "解开机关(L), 击败BOSS(B)"
+        ]
+        
+        for i, desc in enumerate(description):
+            desc_text = self.small_font.render(desc, True, Config.COLORS['YELLOW'])
+            desc_rect = desc_text.get_rect(center=(Config.WINDOW_WIDTH // 2, 450 + i * 25))
+            self.screen.blit(desc_text, desc_rect)
+        
+        # 注意：显示更新在主循环中统一处理
     
     def add_message(self, message: str):
         """

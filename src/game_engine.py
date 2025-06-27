@@ -21,14 +21,14 @@ class GameEngine:
     游戏引擎类
     """
     
-    def __init__(self, maze_size: int = Config.DEFAULT_MAZE_SIZE):
+    def __init__(self, maze_size: int = None):
         """
         初始化游戏引擎
         
         Args:
-            maze_size: 迷宫大小
+            maze_size: 迷宫大小，如果为None则使用默认值
         """
-        self.maze_size = maze_size
+        self.maze_size = maze_size if maze_size is not None else Config.DEFAULT_MAZE_SIZE
         self.maze = None
         self.player_pos = None
         self.start_pos = None
@@ -73,13 +73,20 @@ class GameEngine:
         self.auto_pickup_path = []  # 自动拾取路径
         self.auto_pickup_target = None  # 当前自动拾取目标
     
-    def initialize_game(self) -> Dict:
+    def initialize_game(self, maze_size: int = None) -> Dict:
         """
         初始化游戏
+        
+        Args:
+            maze_size: 迷宫大小，如果提供则更新当前迷宫大小
         
         Returns:
             Dict: 初始化结果
         """
+        # 如果提供了新的迷宫大小，则更新
+        if maze_size is not None:
+            self.maze_size = maze_size
+            
         # 生成迷宫
         self.maze_generator = MazeGenerator(self.maze_size)
         self.maze = self.maze_generator.generate_maze()
