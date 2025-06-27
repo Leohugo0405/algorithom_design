@@ -133,7 +133,7 @@ class GameEngine:
         """
         重置游戏状态
         """
-        self.player_resources = 100
+        self.player_resources = 0
         self.collected_items = set()
         self.solved_puzzles = set()
         self.defeated_bosses = set()
@@ -1397,4 +1397,215 @@ class GameEngine:
             'final_position': self.player_pos,
             'step_results': results,
             'message': f'成功执行{executed_steps}/{len(steps)}步导航'
+        }
+    
+    def execute_optimal_path_navigation(self) -> Dict:
+        """
+        执行最优资源收集路径的自动导航
+        
+        Returns:
+            Dict: 执行结果
+        """
+        # 首先计算最优路径
+        path_result = self.find_optimal_resource_path()
+        
+        if not path_result['success']:
+            return {
+                'success': False,
+                'message': f'无法计算最优路径: {path_result["message"]}',
+                'executed_steps': 0
+            }
+        
+        optimal_path = path_result['path']
+        if not optimal_path:
+            return {
+                'success': False,
+                'message': '最优路径为空',
+                'executed_steps': 0
+            }
+        
+        # 获取导航步骤
+        if not self.resource_path_planner:
+            return {
+                'success': False,
+                'message': '资源路径规划器未初始化',
+                'executed_steps': 0
+            }
+        
+        navigation_steps = self.resource_path_planner.get_auto_navigation_steps(
+            optimal_path, self.player_pos
+        )
+        
+        if not navigation_steps:
+            return {
+                'success': False,
+                'message': '无法生成导航步骤',
+                'executed_steps': 0
+            }
+        
+        # 执行自动导航
+        navigation_result = self.execute_auto_navigation(navigation_steps)
+        
+        # 合并结果信息
+        return {
+            'success': navigation_result['success'],
+            'executed_steps': navigation_result['executed_steps'],
+            'total_steps': navigation_result['total_steps'],
+            'final_position': navigation_result['final_position'],
+            'optimal_path': optimal_path,
+            'resources_in_path': len(path_result.get('resources_collected', [])),
+            'message': f'最优路径自动导航: {navigation_result["message"]}'
+        }
+    
+    def start_visual_optimal_path_navigation(self) -> Dict:
+        """
+        开始可视化最优路径自动导航
+        
+        Returns:
+            Dict: 初始化结果
+        """
+        # 首先计算最优路径
+        path_result = self.find_optimal_resource_path()
+        
+        if not path_result['success']:
+            return {
+                'success': False,
+                'message': f'无法计算最优路径: {path_result["message"]}'
+            }
+        
+        optimal_path = path_result['path']
+        if not optimal_path:
+            return {
+                'success': False,
+                'message': '最优路径为空'
+            }
+        
+        # 获取导航步骤
+        if not self.resource_path_planner:
+            return {
+                'success': False,
+                'message': '资源路径规划器未初始化'
+            }
+        
+        navigation_steps = self.resource_path_planner.get_auto_navigation_steps(
+            optimal_path, self.player_pos
+        )
+        
+        if not navigation_steps:
+            return {
+                'success': False,
+                'message': '无法生成导航步骤'
+            }
+        
+        # 初始化可视化导航状态
+        self.visual_navigation = {
+            'active': True,
+            'steps': navigation_steps,
+            'current_step': 0,
+            'optimal_path': optimal_path,
+            'resources_in_path': len(path_result.get('resources_collected', []))
+        }
+        
+        return {
+            'success': True,
+            'total_steps': len(navigation_steps),
+            'optimal_path': optimal_path,
+            'resources_in_path': len(path_result.get('resources_collected', [])),
+            'message': f'开始可视化导航，共{len(navigation_steps)}步'
+        }
+    
+    def execute_visual_navigation_step(self) -> Dict:
+        """
+        执行可视化导航的下一步
+        
+        Returns:
+            Dict: 执行结果
+        """
+        if not hasattr(self, 'visual_navigation') or not self.visual_navigation.get('active'):
+            return {
+                'success': False,
+                'message': '可视化导航未激活',
+                'completed': True
+            }
+        
+        steps = self.visual_navigation['steps']
+        current_step = self.visual_navigation['current_step']
+        
+        if current_step >= len(steps):
+            # 导航完成
+            self.visual_navigation['active'] = False
+            return {
+                'success': True,
+                'message': '可视化导航完成',
+                'completed': True,
+                'current_step': current_step,
+                'total_steps': len(steps)
+            }
+        
+        # 执行当前步骤
+        step = steps[current_step]
+        result = self.move_player(step)
+        
+        if result['success']:
+            self.visual_navigation['current_step'] += 1
+            
+            return {
+                'success': True,
+                'message': f'执行步骤 {current_step + 1}/{len(steps)}: {step}',
+                'completed': False,
+                'current_step': current_step + 1,
+                'total_steps': len(steps),
+                'move_result': result
+            }
+        else:
+            # 移动失败，停止导航
+            self.visual_navigation['active'] = False
+            return {
+                'success': False,
+                'message': f'导航在第{current_step + 1}步失败: {result.get("message", "未知错误")}',
+                'completed': True,
+                'current_step': current_step,
+                'total_steps': len(steps)
+            }
+    
+    def stop_visual_navigation(self) -> Dict:
+        """
+        停止可视化导航
+        
+        Returns:
+            Dict: 停止结果
+        """
+        if hasattr(self, 'visual_navigation'):
+            self.visual_navigation['active'] = False
+            return {
+                'success': True,
+                'message': '可视化导航已停止'
+            }
+        else:
+            return {
+                'success': False,
+                'message': '没有活跃的可视化导航'
+            }
+    
+    def get_visual_navigation_status(self) -> Dict:
+        """
+        获取可视化导航状态
+        
+        Returns:
+            Dict: 导航状态
+        """
+        if not hasattr(self, 'visual_navigation'):
+            return {
+                'active': False,
+                'current_step': 0,
+                'total_steps': 0
+            }
+        
+        nav = self.visual_navigation
+        return {
+            'active': nav.get('active', False),
+            'current_step': nav.get('current_step', 0),
+            'total_steps': len(nav.get('steps', [])),
+            'optimal_path': nav.get('optimal_path', []),
+            'resources_in_path': nav.get('resources_in_path', 0)
         }

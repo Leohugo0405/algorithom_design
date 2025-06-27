@@ -60,6 +60,11 @@ class GameUI:
         # 迷宫大小设置
         self.selected_maze_size = Config.DEFAULT_MAZE_SIZE
         
+        # 可视化导航相关
+        self.visual_navigation_active = False
+        self.visual_navigation_timer = 0
+        self.visual_navigation_delay = 300  # 每步间隔毫秒数
+        
         # 初始化pygame
         self._initialize_pygame()
     
@@ -79,12 +84,12 @@ class GameUI:
         # 初始化字体 - 分别为文字和emoji使用不同字体
         try:
             # 文字字体
-            self.font = pygame.font.Font('d:/pycharm代码/algorithom/font/msyh.ttc', 18)
-            self.small_font = pygame.font.Font('d:/pycharm代码/algorithom/font/msyh.ttc', 12)
+            self.font = pygame.font.Font('font/msyh.ttc', 18)
+            self.small_font = pygame.font.Font('font/msyh.ttc', 12)
             
             # emoji字体
-            self.emoji_font = pygame.font.Font('d:/pycharm代码/algorithom/font/seguiemj.ttf', 18)
-            self.emoji_small_font = pygame.font.Font('d:/pycharm代码/algorithom/font/seguiemj.ttf', 12)
+            self.emoji_font = pygame.font.Font('font/seguiemj.ttf', 18)
+            self.emoji_small_font = pygame.font.Font('font/seguiemj.ttf', 12)
         except Exception as e:
             print(f"字体加载失败: {e}")
             # 备用字体
@@ -203,6 +208,10 @@ class GameUI:
             # 处理事件
             self._handle_events()
             
+            # 更新可视化导航
+            if self.game_started and not self.paused:
+                self._update_visual_navigation()
+            
             # 如果显示设置界面
             if self.show_settings:
                 self._draw_settings_screen()
@@ -317,20 +326,16 @@ class GameUI:
             if not self.paused and not self.game_completed:
                 toggle_result = self.game_engine.toggle_auto_pickup()
                 self.add_message(toggle_result['message'])
-                
-                # 如果开启了自动拾取，执行一次完整的自动拾取
-                if toggle_result['auto_pickup_enabled']:
-                    pickup_result = self.game_engine.auto_pickup_until_complete(max_steps=50)
-                    if pickup_result['success']:
-                        if pickup_result['resources_collected'] > 0:
-                            self.add_message(f"自动拾取完成: 收集了{pickup_result['resources_collected']}个资源")
-
-                        else:
-                            self.add_message("3x3区域内没有可收集的资源")
-                    else:
-                        self.add_message(f"自动拾取失败: {pickup_result.get('message', '未知错误')}")
-            else:
-                self.add_message("游戏暂停或已结束时无法使用自动拾取")
+        
+        elif key == pygame.K_x:
+            # 执行最优路径自动导航
+            if not self.paused and not self.game_completed:
+                self._execute_optimal_path_navigation()
+        
+        elif key == pygame.K_z:
+            # 停止可视化导航
+            if not self.paused and not self.game_completed:
+                self._stop_visual_navigation()
         
         elif key == pygame.K_c:
             # 比较路径策略
@@ -961,6 +966,9 @@ class GameUI:
         # 获取自动拾取状态
         auto_pickup_status = self.game_engine.get_auto_pickup_status()
         
+        # 获取可视化导航状态
+        visual_nav_status = self.game_engine.get_visual_navigation_status()
+        
         # 统计信息 - 使用图标和颜色编码
         stats_data = [
             ("📍", "位置", f"{game_state['player_pos']}", Config.COLORS['INFO']),
@@ -972,6 +980,13 @@ class GameUI:
             ("🤖", "自动拾取", '开启' if auto_pickup_status['enabled'] else '关闭', 
              Config.COLORS['SUCCESS'] if auto_pickup_status['enabled'] else Config.COLORS['TEXT_DISABLED'])
         ]
+        
+        # 如果有可视化导航，添加导航状态
+        if visual_nav_status['active']:
+            nav_progress = f"{visual_nav_status['current_step']}/{visual_nav_status['total_steps']}"
+            stats_data.append(
+                ("🚀", "可视化导航", nav_progress, Config.COLORS['PURPLE'])
+            )
         
         # 绘制统计信息
         start_y = y + title_height + 10
@@ -1103,6 +1118,8 @@ class GameUI:
             ("🎯", "移动", "方向键/WASD", Config.COLORS['CYAN']),
             ("⚡", "交互", "Enter", Config.COLORS['WARNING']),
             ("🤖", "自动拾取", "A", Config.COLORS['SUCCESS']),
+            ("🚀", "最优路径导航", "X", Config.COLORS['PURPLE']),
+            ("⏹️", "停止可视化导航", "Z", Config.COLORS['DANGER']),
             ("🗺️", "路径方案", "M", Config.COLORS['PURPLE']),
             ("👁️", "切换显示", "V", Config.COLORS['BLUE']),
             ("📊", "路径规划", "P", Config.COLORS['GOLD']),
@@ -1303,8 +1320,8 @@ class GameUI:
         
         # 主标题
         try:
-            title_font = pygame.font.Font('d:/pycharm代码/algorithom/font/msyh.ttc', 32)
-            emoji_title_font = pygame.font.Font('d:/pycharm代码/algorithom/font/seguiemj.ttf', 32)
+            title_font = pygame.font.Font('font/msyh.ttc', 32)
+            emoji_title_font = pygame.font.Font('font/seguiemj.ttf', 32)
         except:
             title_font = pygame.font.SysFont('Arial', 32)
             emoji_title_font = pygame.font.SysFont('Arial', 32)
@@ -1457,6 +1474,84 @@ class GameUI:
                 self.add_message(f"导航失败: {nav_result['message']}")
         else:
             self.add_message(f"导航失败: {result['message']}")
+    
+    def _execute_optimal_path_navigation(self):
+        """
+        执行最优资源收集路径的自动导航（可视化版本）
+        """
+        if not self.game_started or self.game_completed or self.paused:
+            self.add_message("游戏未开始、已结束或已暂停")
+            return
+        
+        # 检查是否已有可视化导航在进行
+        nav_status = self.game_engine.get_visual_navigation_status()
+        if nav_status['active']:
+            self.add_message("可视化导航已在进行中")
+            return
+        
+        self.add_message("开始可视化最优路径自动导航...")
+        result = self.game_engine.start_visual_optimal_path_navigation()
+        
+        if result['success']:
+            self.add_message(f"路径计算完成: 共{result['total_steps']}步")
+            self.add_message(f"路径包含{result['resources_in_path']}个资源")
+            
+            # 显示最优路径
+            if 'optimal_path' in result:
+                self.optimal_path = result['optimal_path']
+                self.show_optimal_path = True
+            
+            # 开始可视化导航
+            self.visual_navigation_active = True
+            self.visual_navigation_timer = 0
+            self.visual_navigation_delay = 300  # 每步间隔300毫秒
+        else:
+            self.add_message(f"最优路径导航失败: {result['message']}")
+    
+    def _update_visual_navigation(self):
+        """
+        更新可视化导航状态
+        """
+        if not self.visual_navigation_active:
+            return
+        
+        # 更新计时器
+        dt = self.clock.get_time()
+        self.visual_navigation_timer += dt
+        
+        # 检查是否到达执行下一步的时间
+        if self.visual_navigation_timer >= self.visual_navigation_delay:
+            self.visual_navigation_timer = 0
+            
+            # 执行下一步
+            result = self.game_engine.execute_visual_navigation_step()
+            
+            if result['success']:
+                if result['completed']:
+                    # 导航完成
+                    self.visual_navigation_active = False
+                    self.add_message("可视化导航完成！")
+                else:
+                    # 显示当前步骤信息
+                    step_info = f"步骤 {result['current_step']}/{result['total_steps']}"
+                    if 'move_result' in result and result['move_result'].get('resource_collected'):
+                        step_info += " (收集资源)"
+                    self.add_message(step_info)
+            else:
+                # 导航失败
+                self.visual_navigation_active = False
+                self.add_message(f"可视化导航失败: {result['message']}")
+    
+    def _stop_visual_navigation(self):
+        """
+        停止可视化导航
+        """
+        if self.visual_navigation_active:
+            result = self.game_engine.stop_visual_navigation()
+            self.visual_navigation_active = False
+            self.add_message(result['message'])
+        else:
+            self.add_message("当前没有活跃的可视化导航")
     
     def _auto_navigate_to_exit(self):
         """

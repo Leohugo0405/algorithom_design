@@ -116,7 +116,6 @@ class Config:
     
     # BOSS战斗参数
     BOSS_HP = 50  # BOSS血量
-    # 移除BOSS攻击伤害，因为不再考虑玩家血量
 
     # 玩家技能参数（移除血量相关技能）
     SKILLS = {
@@ -129,7 +128,7 @@ class Config:
         'special_attack': {
             'name': '大招',
             'damage': 10,
-            'cost': 0,  # 不消耗资源
+            'cost': 0, 
             'cooldown': 2  # 冷却2个回合
         }
     }
