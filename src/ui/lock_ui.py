@@ -63,13 +63,13 @@ class LockUI:
         
         # 初始化字体
         try:
-            self.title_font = pygame.font.Font('d:/pycharm代码/algorithom/font/msyh.ttc', 32)
-            self.font = pygame.font.Font('d:/pycharm代码/algorithom/font/msyh.ttc', 20)
-            self.small_font = pygame.font.Font('d:/pycharm代码/algorithom/font/msyh.ttc', 16)
+            self.title_font = pygame.font.Font('font/msyh.ttc', 32)
+            self.font = pygame.font.Font('font/msyh.ttc', 20)
+            self.small_font = pygame.font.Font('font/msyh.ttc', 16)
             # emoji字体
-            self.emoji_title_font = pygame.font.Font('d:/pycharm代码/algorithom/font/seguiemj.ttf', 32)
-            self.emoji_font = pygame.font.Font('d:/pycharm代码/algorithom/font/seguiemj.ttf', 20)
-            self.emoji_small_font = pygame.font.Font('d:/pycharm代码/algorithom/font/seguiemj.ttf', 16)
+            self.emoji_title_font = pygame.font.Font('font/seguiemj.ttf', 32)
+            self.emoji_font = pygame.font.Font('font/seguiemj.ttf', 20)
+            self.emoji_small_font = pygame.font.Font('font/seguiemj.ttf', 32)
         except:
             self.title_font = pygame.font.SysFont('Arial', 32)
             self.font = pygame.font.SysFont('Arial', 20)

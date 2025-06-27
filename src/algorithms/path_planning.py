@@ -147,12 +147,32 @@ class PathPlanner:
                     # 获取下一个位置的当前最优值
                     existing_value, existing_steps = self.dp[next_x][next_y]
                     
-                    # 双重优化判断：首先比较资源值，相同时比较步数
+                    # 智能路径选择：避免不必要的陷阱
                     should_update = False
+                    
+                    # 检查下一个位置是否是陷阱
+                    is_trap = self.maze[next_x][next_y] == Config.TRAP
+                    
                     if next_value > existing_value:
-                        should_update = True
-                    elif next_value == existing_value and next_steps < existing_steps:
-                        should_update = True
+                        # 如果资源值更高，但是陷阱，需要额外判断
+                        if is_trap:
+                            # 只有当资源收益明显大于陷阱损失时才踩陷阱
+                            resource_gain = next_value - existing_value
+                            step_penalty = (next_steps - existing_steps) * 0.1  # 步数惩罚
+                            if resource_gain > Config.TRAP_RESOURCE_COST + step_penalty:
+                                should_update = True
+                        else:
+                            should_update = True
+                    elif next_value == existing_value:
+                        # 资源值相同时，优先选择非陷阱路径
+                        if not is_trap and next_steps <= existing_steps:
+                            should_update = True
+                        elif is_trap and next_steps < existing_steps - 2:  # 陷阱路径需要明显更短才选择
+                            should_update = True
+                    elif next_value >= existing_value - Config.TRAP_RESOURCE_COST:
+                        # 资源值略低但能避免陷阱，且步数相近时优先选择
+                        if not is_trap and next_steps <= existing_steps + 1:
+                            should_update = True
                     
                     if should_update:
                         self.dp[next_x][next_y] = (next_value, next_steps)

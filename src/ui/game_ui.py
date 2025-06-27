@@ -88,15 +88,15 @@ class GameUI:
             self.small_font = pygame.font.Font('font/msyh.ttc', 12)
             
             # emoji字体
-            self.emoji_font = pygame.font.Font('font/seguiemj.ttf', 18)
-            self.emoji_small_font = pygame.font.Font('font/seguiemj.ttf', 12)
+            self.emoji_font = pygame.font.Font('font/seguiemj.ttf', 30)
+            self.emoji_small_font = pygame.font.Font('font/seguiemj.ttf', 20)
         except Exception as e:
             print(f"字体加载失败: {e}")
             # 备用字体
             self.font = pygame.font.SysFont('Arial', 18)
             self.small_font = pygame.font.SysFont('Arial', 12)
-            self.emoji_font = pygame.font.SysFont('Arial', 18)
-            self.emoji_small_font = pygame.font.SysFont('Arial', 12)
+            self.emoji_font = pygame.font.SysFont('Arial', 36)
+            self.emoji_small_font = pygame.font.SysFont('Arial', 24)
     
     def _render_mixed_text(self, text, font_size='normal', color=(255, 255, 255)):
         """
@@ -1321,8 +1321,8 @@ class GameUI:
         
         # 主标题
         try:
-            title_font = pygame.font.Font('font/msyh.ttc', 32)
-            emoji_title_font = pygame.font.Font('font/seguiemj.ttf', 32)
+            title_font = pygame.font.Font('font/msyh.ttc', 16)
+            emoji_title_font = pygame.font.Font('font/seguiemj.ttf', 16)
         except:
             title_font = pygame.font.SysFont('Arial', 32)
             emoji_title_font = pygame.font.SysFont('Arial', 32)
