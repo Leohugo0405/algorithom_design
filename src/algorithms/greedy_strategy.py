@@ -66,7 +66,7 @@ class GreedyStrategy:
             x, y = pos
             cell = self.maze[x][y]
             
-            # 只考虑有价值的资源（金币和陷阱）
+            # 只考虑有价值的资源（资源和陷阱）
             if cell in [Config.GOLD, Config.TRAP]:
                 distance = self._manhattan_distance(player_pos, pos)
                 value = self._get_cell_value(cell)
@@ -107,7 +107,7 @@ class GreedyStrategy:
             int: 格子价值
         """
         if cell == Config.GOLD:
-            return Config.GOLD_VALUE
+            return Config.RESOURCE_VALUE
         elif cell == Config.TRAP:
             return -Config.TRAP_RESOURCE_COST
         else:
@@ -228,7 +228,7 @@ class GreedyStrategy:
             current_pos = target_pos
             total_value += best_resource['value']
             
-            # 将收集过的金币格子设为路径（删除资源）
+            # 将收集过的资源格子设为路径（删除资源）
             if self.maze[current_pos[0]][current_pos[1]] == Config.GOLD:
                 self.maze[current_pos[0]][current_pos[1]] = Config.PATH
         
@@ -297,7 +297,7 @@ class GreedyStrategy:
             current_pos = best_resource['position']
             total_value += best_resource['value']
             
-            # 将收集过的金币格子设为路径（删除资源）
+            # 将收集过的资源格子设为路径（删除资源）
             if self.maze[current_pos[0]][current_pos[1]] == Config.GOLD:
                 self.maze[current_pos[0]][current_pos[1]] = Config.PATH
         
@@ -329,7 +329,7 @@ class GreedyStrategy:
             for j in range(self.size):
                 if self.maze[i][j] == Config.GOLD:
                     all_resources += 1
-                    all_value += Config.GOLD_VALUE
+                    all_value += Config.RESOURCE_VALUE
                 elif self.maze[i][j] == Config.TRAP:
                     all_resources += 1
                     all_value -= Config.TRAP_RESOURCE_COST

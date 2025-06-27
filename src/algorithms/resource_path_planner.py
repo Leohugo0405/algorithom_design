@@ -65,7 +65,7 @@ class ResourcePathPlanner:
         cell = self.maze[x][y]
         
         if cell == Config.GOLD:
-            return Config.GOLD_VALUE
+            return Config.RESOURCE_VALUE
         elif cell == Config.TRAP:
             return -Config.TRAP_RESOURCE_COST
         elif cell in [Config.PATH, Config.START, Config.EXIT, Config.LOCKER, Config.BOSS]:

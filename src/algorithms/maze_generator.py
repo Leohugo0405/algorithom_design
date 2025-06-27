@@ -144,7 +144,7 @@ class MazeGenerator:
     
     def _add_game_elements(self):
         """
-        添加游戏元素：金币、陷阱、机关、BOSS
+        添加游戏元素：资源、陷阱、机关、BOSS
         """
         # 获取所有可用的通路位置
         available_positions = []
@@ -156,7 +156,7 @@ class MazeGenerator:
         if not available_positions:
             return
         
-        # 添加金币
+        # 添加资源
         gold_count = max(1, int(len(available_positions) * Config.RESOURCE_DENSITY))
         gold_positions = random.sample(available_positions, min(gold_count, len(available_positions)))
         for pos in gold_positions:

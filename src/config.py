@@ -33,41 +33,86 @@ class Config:
     BOSS = 'B'
     PLAYER = 'P'
     
-    # 颜色定义 (RGB)
+    # 现代化颜色定义 (RGB) - 采用Material Design配色
     COLORS = {
-        'BLACK': (0, 0, 0),
-        'WHITE': (255, 255, 255),
-        'GRAY': (128, 128, 128),
-        'RED': (255, 0, 0),
-        'GREEN': (0, 255, 0),
-        'BLUE': (0, 0, 255),
-        'LIGHT_BLUE': (173, 216, 230),
-        'YELLOW': (255, 255, 0),
-        'ORANGE': (255, 165, 0),
-        'PURPLE': (128, 0, 128),
-        'BROWN': (139, 69, 19),
-        'GOLD': (255, 215, 0),
-        'DARK_GREEN': (0, 100, 0),
-        'DARK_RED': (139, 0, 0)
+        # 基础色彩 - 深色主题
+        'BLACK': (18, 18, 18),          # 纯黑背景
+        'WHITE': (255, 255, 255),       # 纯白文字
+        'GRAY': (158, 158, 158),        # 中性灰
+        'LIGHT_GRAY': (245, 245, 245),  # 浅灰
+        'DARK_GRAY': (33, 33, 33),      # 深灰面板
+        'MEDIUM_GRAY': (66, 66, 66),    # 中等灰
+        
+        # 主题色彩 - 现代渐变
+        'PRIMARY': (64, 196, 255),      # 科技蓝
+        'PRIMARY_DARK': (33, 150, 243), # 深蓝
+        'SECONDARY': (158, 158, 158),   # 次要灰色
+        'SUCCESS': (76, 175, 80),       # 成功绿
+        'DANGER': (244, 67, 54),        # 危险红
+        'WARNING': (255, 152, 0),       # 警告橙
+        'INFO': (0, 188, 212),          # 信息青
+        
+        # 游戏专用色彩 - 高对比度
+        'RED': (244, 67, 54),           # 鲜艳红
+        'GREEN': (76, 175, 80),         # 鲜艳绿
+        'BLUE': (33, 150, 243),         # 鲜艳蓝
+        'LIGHT_BLUE': (3, 169, 244),    # 亮蓝
+        'YELLOW': (255, 235, 59),       # 鲜艳黄
+        'ORANGE': (255, 152, 0),        # 鲜艳橙
+        'PURPLE': (156, 39, 176),       # 鲜艳紫
+        'BROWN': (121, 85, 72),         # 现代棕
+        'GOLD': (255, 193, 7),          # 金色
+        'DARK_GREEN': (27, 94, 32),     # 深绿
+        'DARK_RED': (183, 28, 28),      # 深红
+        'CYAN': (0, 188, 212),          # 青色
+        'PINK': (233, 30, 99),          # 粉色
+        'LIME': (139, 195, 74),         # 青柠色
+        'INDIGO': (63, 81, 181),        # 靛蓝
+        'TEAL': (0, 150, 136),          # 蓝绿色
+        
+        # 渐变色彩
+        'GRADIENT_START': (64, 196, 255),   # 渐变起始 - 科技蓝
+        'GRADIENT_MID': (100, 181, 246),    # 渐变中间
+        'GRADIENT_END': (156, 39, 176),     # 渐变结束 - 紫色
+        
+        # UI专用色彩
+        'PANEL_BG': (33, 33, 33),           # 面板背景
+        'PANEL_BORDER': (66, 66, 66),       # 面板边框
+        'BUTTON_BG': (66, 66, 66),          # 按钮背景
+        'BUTTON_HOVER': (97, 97, 97),       # 按钮悬停
+        'BUTTON_ACTIVE': (33, 150, 243),    # 按钮激活
+        'TEXT_PRIMARY': (255, 255, 255),    # 主要文字
+        'TEXT_SECONDARY': (158, 158, 158),  # 次要文字
+        'TEXT_DISABLED': (97, 97, 97),      # 禁用文字
+        'ACCENT': (255, 64, 129),           # 强调色
+        'HIGHLIGHT': (255, 235, 59),        # 高亮色
+        
+        # 半透明色彩
+        'OVERLAY': (0, 0, 0, 180),          # 半透明遮罩
+        'PANEL_OVERLAY': (33, 33, 33, 240), # 面板半透明背景
+        'GLOW': (64, 196, 255, 100),        # 发光效果
+        'SHADOW': (20, 20, 20),             # 阴影效果
+        'BORDER': (97, 97, 97),             # 边框颜色
+        'LIGHT_GREEN': (129, 199, 132)      # 浅绿色
     }
     
     # 游戏元素颜色映射
     ELEMENT_COLORS = {
-        WALL: COLORS['BLACK'],
+        WALL: COLORS['DARK_GRAY'],
         PATH: COLORS['WHITE'],
-        START: COLORS['GREEN'],
-        EXIT: COLORS['BLUE'],
+        START: COLORS['SUCCESS'],
+        EXIT: COLORS['PRIMARY'],
         GOLD: COLORS['GOLD'],
-        TRAP: COLORS['RED'],
+        TRAP: COLORS['DANGER'],
         LOCKER: COLORS['PURPLE'],
         BOSS: COLORS['DARK_RED'],
-        PLAYER: COLORS['ORANGE']
+        PLAYER: COLORS['ACCENT']
     }
     
     # 游戏参数
     PLAYER_VISION_RANGE = 3  # 玩家视野范围 (3x3)
-    GOLD_VALUE = 5  # 金币价值
-    TRAP_RESOURCE_COST = 10  # 陷阱消耗资源（不再影响血量）
+    RESOURCE_VALUE = 5  # 资源价值（原金币）
+    TRAP_RESOURCE_COST = 3  # 陷阱消耗资源
     
     # BOSS战斗参数
     BOSS_HP = 50  # BOSS血量

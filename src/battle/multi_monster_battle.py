@@ -25,7 +25,7 @@ class Monster:
     
     def take_damage(self, damage: int) -> int:
         """受到伤害"""
-        actual_damage = max(1, damage - self.defense)  # 至少造成1点伤害
+        actual_damage = max(1, damage)  # 至少造成1点伤害
         self.current_hp -= actual_damage
         if self.current_hp <= 0:
             self.current_hp = 0

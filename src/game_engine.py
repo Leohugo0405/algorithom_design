@@ -44,14 +44,13 @@ class GameEngine:
         self.resource_path_planner = None
         
         # 游戏状态（移除玩家血量）
-        self.player_resources = 100
+        self.player_resources = 0
         self.collected_items = set()
         self.solved_puzzles = set()
         self.defeated_bosses = set()
         
         # 游戏统计
         self.moves_count = 0
-        self.total_value_collected = 0
         self.puzzles_attempted = 0
         self.battles_fought = 0
         
@@ -139,7 +138,7 @@ class GameEngine:
         self.solved_puzzles = set()
         self.defeated_bosses = set()
         self.moves_count = 0
-        self.total_value_collected = 0
+
         self.puzzles_attempted = 0
         self.battles_fought = 0
         self.active_puzzle = None
@@ -176,7 +175,7 @@ class GameEngine:
             'player_pos': self.player_pos,
             'player_resources': self.player_resources,
             'moves_count': self.moves_count,
-            'total_value_collected': self.total_value_collected,
+
             'collected_items': len(self.collected_items),
             'solved_puzzles': len(self.solved_puzzles),
             'defeated_bosses': len(self.defeated_bosses),
@@ -254,13 +253,11 @@ class GameEngine:
             return result  # 已经收集过的物品
         
         if cell == Config.GOLD:
-            self.total_value_collected += Config.GOLD_VALUE
-            self.player_resources += Config.GOLD_VALUE
+            self.player_resources += Config.RESOURCE_VALUE
             self.collected_items.add((x, y))
             result = {
-                'type': 'gold',
-                'message': f'收集到金币！获得{Config.GOLD_VALUE}资源',
-                'value_change': Config.GOLD_VALUE
+                'type': 'resource',
+                'message': f'收集到资源！获得{Config.RESOURCE_VALUE}资源'
             }
         
         elif cell == Config.TRAP:
@@ -270,8 +267,7 @@ class GameEngine:
             self.collected_items.add((x, y))
             result = {
                 'type': 'trap',
-                'message': f'触发陷阱！消耗{resource_cost}资源',
-                'value_change': -resource_cost
+                'message': f'触发陷阱！消耗{resource_cost}资源'
             }
         
         elif cell == Config.LOCKER:
@@ -477,7 +473,7 @@ class GameEngine:
                     self.solved_puzzles.add(self.active_puzzle['position'])
                     reward = 20  # 解谜奖励
                     self.player_resources += reward
-                    self.total_value_collected += reward
+
                     
                     result = {
                         'success': True,
@@ -533,7 +529,7 @@ class GameEngine:
     #                 
     #                 reward = 50  # 击败BOSS奖励
     #                 self.player_resources += reward
-    #                 self.total_value_collected += reward
+    # 
     #                 
     #                 result = {
     #                     'success': True,
@@ -819,7 +815,7 @@ class GameEngine:
         if not available_resources:
             return None
         
-        # 优先选择正价值资源（金币），按性价比排序
+        # 优先选择正价值资源，按性价比排序
         positive_resources = [r for r in available_resources if r['value'] > 0]
         
         if positive_resources:
@@ -846,7 +842,7 @@ class GameEngine:
             for j in range(max(0, y - 1), min(self.maze_size, y + 2)):
                 cell = self.maze[i][j]
                 
-                # 只考虑有价值的资源（金币和陷阱）
+                # 只考虑有价值的资源（资源和陷阱）
                 if cell in [Config.GOLD, Config.TRAP]:
                     distance = abs(i - x) + abs(j - y)  # 曼哈顿距离
                     value = self._get_cell_value(cell)
@@ -875,7 +871,7 @@ class GameEngine:
             int: 格子价值
         """
         if cell == Config.GOLD:
-            return Config.GOLD_VALUE
+            return Config.RESOURCE_VALUE
         elif cell == Config.TRAP:
             return -Config.TRAP_RESOURCE_COST
         else:
@@ -1022,7 +1018,7 @@ class GameEngine:
         
         steps_taken = 0
         resources_collected = 0
-        total_value_gained = 0
+
         execution_log = []
         
         while steps_taken < max_steps:
@@ -1043,7 +1039,6 @@ class GameEngine:
             # 检查是否收集到资源
             if step_result.get('interaction', {}).get('type') in ['gold', 'trap']:
                 resources_collected += 1
-                total_value_gained += step_result['interaction'].get('value_change', 0)
             
             # 如果没有更多资源可拾取，结束
             if step_result.get('action') == 'no_resources':
@@ -1053,10 +1048,9 @@ class GameEngine:
             'success': True,
             'steps_taken': steps_taken,
             'resources_collected': resources_collected,
-            'total_value_gained': total_value_gained,
             'final_position': self.player_pos,
             'execution_log': execution_log[-10:] if len(execution_log) > 10 else execution_log,  # 只保留最后10步
-            'message': f'自动拾取完成：执行{steps_taken}步，收集{resources_collected}个资源，获得{total_value_gained}价值'
+            'message': f'自动拾取完成：执行{steps_taken}步，收集{resources_collected}个资源'
         }
     
 
@@ -1114,7 +1108,7 @@ class GameEngine:
                 'final_position': self.player_pos,
                 'moves_count': self.moves_count,
                 'final_resources': self.player_resources,
-                'total_value_collected': self.total_value_collected
+
             },
             'collection_stats': {
                 'items_collected': len(self.collected_items),
@@ -1124,9 +1118,7 @@ class GameEngine:
                 'battles_fought': self.battles_fought
             },
             'efficiency_metrics': {
-                'value_per_move': self.total_value_collected / max(1, self.moves_count),
-                'completion_rate': 1.0 if self.is_game_completed() else 0.0,
-                'resource_efficiency': self.total_value_collected / 100.0  # 相对于初始资源
+                'completion_rate': 1.0 if self.is_game_completed() else 0.0
             }
         }
     
@@ -1363,7 +1355,7 @@ class GameEngine:
             'current_resources': self.player_resources,
             'items_collected': len(self.collected_items),
             'moves_made': self.moves_count,
-            'actual_value_collected': self.total_value_collected
+
         })
         
         return analysis
