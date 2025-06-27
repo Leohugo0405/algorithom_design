@@ -28,8 +28,8 @@ class PathPlanner:
         # 找到起点和终点
         self._find_start_and_exit()
         
-        # 初始化DP表
-        self.dp = [[-float('inf') for _ in range(self.size)] for _ in range(self.size)]
+        # 初始化DP表：存储(最大资源值, 最小步数)
+        self.dp = [[(-float('inf'), float('inf')) for _ in range(self.size)] for _ in range(self.size)]
         self.parent = [[None for _ in range(self.size)] for _ in range(self.size)]
     
     def _find_start_and_exit(self):
@@ -80,19 +80,20 @@ class PathPlanner:
         if not start_pos or not self.exit_pos:
             return 0, []
         
-        # 重新初始化DP表
-        self.dp = [[-float('inf') for _ in range(self.size)] for _ in range(self.size)]
+        # 重新初始化DP表：存储(最大资源值, 最小步数)
+        self.dp = [[(-float('inf'), float('inf')) for _ in range(self.size)] for _ in range(self.size)]
         self.parent = [[None for _ in range(self.size)] for _ in range(self.size)]
         
         # 初始化起点
         start_x, start_y = start_pos
-        self.dp[start_x][start_y] = self._get_cell_value(start_x, start_y)
+        start_value = self._get_cell_value(start_x, start_y)
+        self.dp[start_x][start_y] = (start_value, 0)  # (资源值, 步数)
         
         # 动态规划填表
         self._fill_dp_table_from_start(start_pos)
         
         # 回溯构建最优路径
-        max_value = self.dp[self.exit_pos[0]][self.exit_pos[1]]
+        max_value, min_steps = self.dp[self.exit_pos[0]][self.exit_pos[1]]
         optimal_path = self._reconstruct_path_to_exit()
         
         return max_value, optimal_path
@@ -107,44 +108,59 @@ class PathPlanner:
     def _fill_dp_table_from_start(self, start_pos: Tuple[int, int]):
         """
         从指定起点使用动态规划填充DP表
-        按照用户提供的DP模式：三层嵌套循环结构
+        双重优化目标：首先最大化资源，然后最小化步数
         
         Args:
             start_pos: 起点位置
         """
-        # 构建图结构：graph[period][current_pos][prev_pos] = transition_cost
-        graph = self._build_graph_structure()
+        # 使用BFS进行层次遍历，确保按步数递增的顺序处理
+        from collections import deque
         
-        # 初始化costs字典：costs[pos] = 到达该位置的最大价值
-        costs = {}
-        parents = {}
+        queue = deque([(start_pos, 0)])  # (位置, 步数)
+        visited = set()
         
-        # 初始化所有可达位置的costs为负无穷
-        for i in range(self.size):
-            for j in range(self.size):
-                if self.maze[i][j] != Config.WALL:
-                    costs[(i, j)] = -float('inf')
-                    parents[(i, j)] = None
-        
-        # 设置起点的初始值
-        costs[start_pos] = self._get_cell_value(start_pos[0], start_pos[1])
-        
-        # 按照用户提供的DP模式进行三层嵌套循环
-        for period_key in graph.keys():
-            for key_i in graph[period_key].keys():
-                for key_i_cost in graph[period_key][key_i].keys():
-                    # 如果通过key_i_cost到达key_i的路径更优，则更新
-                    transition_value = graph[period_key][key_i][key_i_cost]
-                    new_cost = costs[key_i_cost] + transition_value
+        while queue:
+            current_pos, steps = queue.popleft()
+            
+            if current_pos in visited:
+                continue
+            visited.add(current_pos)
+            
+            x, y = current_pos
+            
+            # 四个方向的移动
+            directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
+            
+            for dx, dy in directions:
+                next_x, next_y = x + dx, y + dy
+                next_pos = (next_x, next_y)
+                
+                # 检查边界和墙壁
+                if (0 <= next_x < self.size and 0 <= next_y < self.size and 
+                    self.maze[next_x][next_y] != Config.WALL):
                     
-                    if new_cost > costs[key_i]:
-                        costs[key_i] = new_cost
-                        parents[key_i] = key_i_cost
-        
-        # 将结果更新到DP表中
-        for pos, cost in costs.items():
-            self.dp[pos[0]][pos[1]] = cost
-            self.parent[pos[0]][pos[1]] = parents[pos]
+                    # 计算到达下一个位置的资源值和步数
+                    current_value, current_steps = self.dp[x][y]
+                    next_value = current_value + self._get_cell_value(next_x, next_y)
+                    next_steps = current_steps + 1
+                    
+                    # 获取下一个位置的当前最优值
+                    existing_value, existing_steps = self.dp[next_x][next_y]
+                    
+                    # 双重优化判断：首先比较资源值，相同时比较步数
+                    should_update = False
+                    if next_value > existing_value:
+                        should_update = True
+                    elif next_value == existing_value and next_steps < existing_steps:
+                        should_update = True
+                    
+                    if should_update:
+                        self.dp[next_x][next_y] = (next_value, next_steps)
+                        self.parent[next_x][next_y] = current_pos
+                        
+                        # 将下一个位置加入队列继续探索
+                        if next_pos not in visited:
+                            queue.append((next_pos, next_steps))
     
     def _build_graph_structure(self):
         """
@@ -208,7 +224,8 @@ class PathPlanner:
         Returns:
             List[Tuple[int, int]]: 最优路径坐标列表
         """
-        if self.dp[self.exit_pos[0]][self.exit_pos[1]] == -float('inf'):
+        exit_value, exit_steps = self.dp[self.exit_pos[0]][self.exit_pos[1]]
+        if exit_value == -float('inf'):
             return []  # 无法到达终点
         
         path = []
@@ -230,7 +247,7 @@ class PathPlanner:
     
     def get_path_details(self, path: List[Tuple[int, int]]) -> Dict:
         """
-        获取路径详细信息
+        获取路径详细信息（仅显示步数和资源统计）
         
         Args:
             path: 路径坐标列表
@@ -241,28 +258,22 @@ class PathPlanner:
         if not path:
             return {
                 'length': 0,
-                'total_value': 0,
                 'gold_collected': 0,
                 'traps_encountered': 0,
                 'path_elements': []
             }
         
-        total_value = 0
         gold_collected = 0
         traps_encountered = 0
         path_elements = []
         
         for x, y in path:
             cell = self.maze[x][y]
-            cell_value = self._get_cell_value(x, y)
             
             path_elements.append({
                 'position': (x, y),
-                'element': cell,
-                'value': cell_value
+                'element': cell
             })
-            
-            total_value += cell_value
             
             if cell == Config.GOLD:
                 gold_collected += 1
@@ -271,7 +282,6 @@ class PathPlanner:
         
         return {
             'length': len(path),
-            'total_value': total_value,
             'gold_collected': gold_collected,
             'traps_encountered': traps_encountered,
             'path_elements': path_elements
@@ -280,6 +290,7 @@ class PathPlanner:
     def visualize_dp_table(self) -> List[List[str]]:
         """
         可视化DP表，用于调试
+        显示格式：资源值/步数
         
         Returns:
             List[List[str]]: 格式化的DP表
@@ -288,10 +299,11 @@ class PathPlanner:
         for i in range(self.size):
             row = []
             for j in range(self.size):
-                if self.dp[i][j] == -float('inf'):
-                    row.append('  #  ')
+                value, steps = self.dp[i][j]
+                if value == -float('inf'):
+                    row.append('   #   ')
                 else:
-                    row.append(f'{self.dp[i][j]:4.0f} ')
+                    row.append(f'{value:2.0f}/{steps:2.0f}')
             result.append(row)
         return result
     

@@ -469,7 +469,7 @@ class GameUI:
         result = self.game_engine.get_optimal_path()
         if result['success']:
             self.optimal_path = result['optimal_path']
-            self.add_message(f"最优路径计算完成，价值: {result['max_value']}")
+            self.add_message(f"最优路径计算完成，步数: {len(result['optimal_path'])}")
         else:
             self.add_message("最优路径计算失败")
     
@@ -855,8 +855,9 @@ class GameUI:
             
             # 绘制路径信息
             name = alt.get('name', f'方案{i+1}')
-            value = alt.get('total_value', 0)
-            text = f"{name} (价值:{value})"
+            steps = len(alt.get('path', []))
+            resources = alt.get('gold_collected', 0)
+            text = f"{name} (步数:{steps}, 资源:{resources})"
             text_surface = self._render_mixed_text(text, 'small', Config.COLORS['TEXT_PRIMARY'])
             self.screen.blit(text_surface, (legend_x + 55, y_offset))
     
@@ -1463,8 +1464,7 @@ class GameUI:
         if result['success']:
             self.add_message(f"找到最近资源，距离{result['total_steps']}步")
             resource_type = result['target_resource']['type']
-            resource_value = result['target_resource']['value']
-            self.add_message(f"目标: {resource_type} (价值{resource_value})")
+            self.add_message(f"目标: {resource_type}")
             
             # 执行自动导航
             nav_result = self.game_engine.execute_auto_navigation(result['steps'])
@@ -1604,7 +1604,7 @@ class GameUI:
                     resources = len(alt.get('resources_collected', []))
                     
                     self.add_message(f"{i}. {name}")
-                    self.add_message(f"   价值:{value} 步数:{steps} 资源:{resources}")
+                    self.add_message(f"   步数:{steps} 资源:{resources}")
         else:
             self.add_message("无可用路径方案")
         

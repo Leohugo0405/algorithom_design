@@ -111,8 +111,8 @@ class Config:
     
     # 游戏参数
     PLAYER_VISION_RANGE = 3  # 玩家视野范围 (3x3)
-    RESOURCE_VALUE = 5  # 资源价值（原金币）
-    TRAP_RESOURCE_COST = 3  # 陷阱消耗资源
+    RESOURCE_VALUE = 5  # 金币资源价值（踩到金币+5）
+    TRAP_RESOURCE_COST = 3  # 陷阱资源损失（踩到陷阱-3）
     
     # BOSS战斗参数
     BOSS_HP = 50  # BOSS血量
