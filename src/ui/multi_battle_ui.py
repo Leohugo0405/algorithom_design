@@ -353,10 +353,13 @@ class MultiMonsterBattleUI:
     
     def _render(self):
         """渲染界面"""
-        self.screen.fill(Config.COLORS['BLACK'])
+        # 使用深色背景
+        self.screen.fill(Config.COLORS['DARK_GRAY'])
         
-        # 渲染标题
-        title_text = self.title_font.render(f"多怪物战斗 - {self.scenario['name']}", True, Config.COLORS['WHITE'])
+        # 渲染现代化标题
+        title_shadow = self.title_font.render(f"⚔️ 多怪物战斗 - {self.scenario['name']}", True, Config.COLORS['SHADOW'])
+        self.screen.blit(title_shadow, (12, 12))
+        title_text = self.title_font.render(f"⚔️ 多怪物战斗 - {self.scenario['name']}", True, Config.COLORS['PRIMARY'])
         self.screen.blit(title_text, (10, 10))
         
         # 渲染各个区域
@@ -378,199 +381,339 @@ class MultiMonsterBattleUI:
     
     def _render_log_area(self):
         """渲染日志区域"""
-        pygame.draw.rect(self.screen, Config.COLORS['GRAY'], self.log_area, 2)
+        # 绘制阴影
+        shadow_rect = pygame.Rect(self.log_area.x + 3, self.log_area.y + 3, self.log_area.width, self.log_area.height)
+        pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], shadow_rect)
         
-        # 标题
-        log_title = self.font.render("战斗日志", True, Config.COLORS['WHITE'])
-        self.screen.blit(log_title, (self.log_area.x + 5, self.log_area.y + 5))
+        # 绘制主体背景
+        pygame.draw.rect(self.screen, Config.COLORS['PANEL_BG'], self.log_area)
+        pygame.draw.rect(self.screen, Config.COLORS['INFO'], self.log_area, 2)
+        
+        # 标题栏
+        title_rect = pygame.Rect(self.log_area.x, self.log_area.y, self.log_area.width, 25)
+        pygame.draw.rect(self.screen, Config.COLORS['INFO'], title_rect)
+        
+        # 标题文字
+        log_title = self.font.render("📜 战斗日志", True, Config.COLORS['WHITE'])
+        title_text_rect = log_title.get_rect(center=(title_rect.centerx, title_rect.centery))
+        self.screen.blit(log_title, title_text_rect)
         
         # 日志内容
         battle_state = self.battle.get_battle_state()
         logs = battle_state['battle_log']
         
-        y_offset = 30
-        for log in logs[-8:]:  # 显示最近8条日志
+        y_offset = 35
+        for i, log in enumerate(logs[-7:]):  # 显示最近7条日志
             if y_offset + 20 > self.log_area.height:
                 break
+            # 交替背景色
+            if i % 2 == 0:
+                log_bg = pygame.Rect(self.log_area.x + 2, self.log_area.y + y_offset - 2, self.log_area.width - 4, 18)
+                pygame.draw.rect(self.screen, Config.COLORS['DARK_GRAY'], log_bg)
+            
             log_text = self.small_font.render(log, True, Config.COLORS['WHITE'])
-            self.screen.blit(log_text, (self.log_area.x + 5, self.log_area.y + y_offset))
+            self.screen.blit(log_text, (self.log_area.x + 8, self.log_area.y + y_offset))
             y_offset += 20
     
     def _render_skill_area(self):
         """渲染技能区域"""
-        pygame.draw.rect(self.screen, Config.COLORS['GRAY'], self.skill_area, 2)
+        # 绘制阴影
+        shadow_rect = pygame.Rect(self.skill_area.x + 3, self.skill_area.y + 3, self.skill_area.width, self.skill_area.height)
+        pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], shadow_rect)
         
-        # 标题
-        skill_title = self.font.render("技能", True, Config.COLORS['WHITE'])
-        self.screen.blit(skill_title, (self.skill_area.x + 5, self.skill_area.y + 5))
+        # 绘制主体背景
+        pygame.draw.rect(self.screen, Config.COLORS['PANEL_BG'], self.skill_area)
+        pygame.draw.rect(self.screen, Config.COLORS['WARNING'], self.skill_area, 2)
+        
+        # 标题栏
+        title_rect = pygame.Rect(self.skill_area.x, self.skill_area.y, self.skill_area.width, 25)
+        pygame.draw.rect(self.screen, Config.COLORS['WARNING'], title_rect)
+        
+        # 标题文字
+        skill_title = self.font.render("⚡ 技能面板", True, Config.COLORS['WHITE'])
+        title_text_rect = skill_title.get_rect(center=(title_rect.centerx, title_rect.centery))
+        self.screen.blit(skill_title, title_text_rect)
         
         # 技能按钮
         available_skills = self.battle.get_available_skills()
         self.skill_buttons.clear()
         
-        y_offset = 30
+        y_offset = 35
         for skill_name, skill_info in Config.SKILLS.items():
             button_rect = pygame.Rect(
                 self.skill_area.x + 10,
                 self.skill_area.y + y_offset,
-                280, 35
+                280, 32
             )
             self.skill_buttons[skill_name] = button_rect
             
-            # 按钮颜色
+            # 按钮阴影
+            shadow_button = pygame.Rect(button_rect.x + 2, button_rect.y + 2, button_rect.width, button_rect.height)
+            pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], shadow_button)
+            
+            # 按钮颜色和状态
             if available_skills.get(skill_name, False):
                 if self.selected_skill == skill_name:
-                    color = Config.COLORS['YELLOW']
+                    color = Config.COLORS['ACCENT']
+                    border_color = Config.COLORS['PRIMARY']
+                    text_color = Config.COLORS['WHITE']
                 else:
-                    color = Config.COLORS['GREEN']
+                    color = Config.COLORS['SUCCESS']
+                    border_color = Config.COLORS['SUCCESS']
+                    text_color = Config.COLORS['WHITE']
             else:
-                color = Config.COLORS['DARK_RED']
+                color = Config.COLORS['DARK_GRAY']
+                border_color = Config.COLORS['DANGER']
+                text_color = Config.COLORS['GRAY']
             
             pygame.draw.rect(self.screen, color, button_rect)
-            pygame.draw.rect(self.screen, Config.COLORS['WHITE'], button_rect, 2)
+            pygame.draw.rect(self.screen, border_color, button_rect, 2)
             
-            # 技能文本
-            skill_text = f"{skill_info['name']} (冷却: {skill_info.get('cooldown', 0)}回合)"
-            text_surface = self.small_font.render(skill_text, True, Config.COLORS['BLACK'])
+            # 技能图标和文本
+            skill_icons = {'普通攻击': '⚔️', '强力攻击': '💥', '治疗': '💚', '防御': '🛡️'}
+            icon = skill_icons.get(skill_info['name'], '⚡')
+            skill_text = f"{icon} {skill_info['name']} (CD: {skill_info.get('cooldown', 0)})"
+            text_surface = self.small_font.render(skill_text, True, text_color)
             text_rect = text_surface.get_rect(center=button_rect.center)
             self.screen.blit(text_surface, text_rect)
             
-            y_offset += 40
+            y_offset += 37
     
     def _render_player_area(self):
         """渲染玩家区域"""
-        pygame.draw.rect(self.screen, Config.COLORS['BLUE'], self.player_area, 2)
+        # 绘制阴影
+        shadow_rect = pygame.Rect(self.player_area.x + 3, self.player_area.y + 3, self.player_area.width, self.player_area.height)
+        pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], shadow_rect)
+        
+        # 绘制主体背景
+        pygame.draw.rect(self.screen, Config.COLORS['PANEL_BG'], self.player_area)
+        pygame.draw.rect(self.screen, Config.COLORS['PRIMARY'], self.player_area, 2)
         
         battle_state = self.battle.get_battle_state()
         
-        # 玩家信息（移除生命值显示）
-        player_title = self.font.render("玩家状态", True, Config.COLORS['WHITE'])
-        self.screen.blit(player_title, (self.player_area.x + 5, self.player_area.y + 5))
+        # 标题栏
+        title_rect = pygame.Rect(self.player_area.x, self.player_area.y, self.player_area.width, 25)
+        pygame.draw.rect(self.screen, Config.COLORS['PRIMARY'], title_rect)
         
-        resource_text = f"资源: {battle_state['player_resources']}"
-        resource_surface = self.small_font.render(resource_text, True, Config.COLORS['WHITE'])
-        self.screen.blit(resource_surface, (self.player_area.x + 10, self.player_area.y + 35))
+        # 玩家信息标题
+        player_title = self.font.render("🚶 玩家状态", True, Config.COLORS['WHITE'])
+        title_text_rect = player_title.get_rect(center=(title_rect.centerx, title_rect.centery))
+        self.screen.blit(player_title, title_text_rect)
         
-        turn_text = f"回合: {battle_state['turn_count']}"
-        turn_surface = self.small_font.render(turn_text, True, Config.COLORS['WHITE'])
-        self.screen.blit(turn_surface, (self.player_area.x + 10, self.player_area.y + 55))
+        # 资源信息
+        resource_text = f"💰 资源: {battle_state['player_resources']}"
+        resource_surface = self.small_font.render(resource_text, True, Config.COLORS['GOLD'])
+        self.screen.blit(resource_surface, (self.player_area.x + 15, self.player_area.y + 35))
         
-        # 资源条（替代生命值条）
-        resource_bar_rect = pygame.Rect(self.player_area.x + 10, self.player_area.y + 80, 200, 20)
-        pygame.draw.rect(self.screen, Config.COLORS['GRAY'], resource_bar_rect)
+        turn_text = f"🔄 回合: {battle_state['turn_count']}"
+        turn_surface = self.small_font.render(turn_text, True, Config.COLORS['INFO'])
+        self.screen.blit(turn_surface, (self.player_area.x + 15, self.player_area.y + 55))
         
-        resource_percentage = min(1.0, battle_state['player_resources'] / 100.0)  # 假设最大资源为100
+        # 现代化资源条
+        resource_bar_rect = pygame.Rect(self.player_area.x + 15, self.player_area.y + 80, 200, 18)
+        # 资源条阴影
+        bar_shadow = pygame.Rect(resource_bar_rect.x + 2, resource_bar_rect.y + 2, resource_bar_rect.width, resource_bar_rect.height)
+        pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], bar_shadow)
+        
+        # 资源条背景
+        pygame.draw.rect(self.screen, Config.COLORS['DARK_GRAY'], resource_bar_rect)
+        
+        # 资源条填充
+        resource_percentage = min(1.0, battle_state['player_resources'] / 100.0)
         resource_fill_width = int(resource_bar_rect.width * resource_percentage)
-        resource_fill_rect = pygame.Rect(resource_bar_rect.x, resource_bar_rect.y, resource_fill_width, resource_bar_rect.height)
-        pygame.draw.rect(self.screen, Config.COLORS['BLUE'], resource_fill_rect)
+        if resource_fill_width > 0:
+            resource_fill_rect = pygame.Rect(resource_bar_rect.x, resource_bar_rect.y, resource_fill_width, resource_bar_rect.height)
+            # 渐变效果
+            if resource_percentage > 0.6:
+                fill_color = Config.COLORS['SUCCESS']
+            elif resource_percentage > 0.3:
+                fill_color = Config.COLORS['WARNING']
+            else:
+                fill_color = Config.COLORS['DANGER']
+            pygame.draw.rect(self.screen, fill_color, resource_fill_rect)
+        
         pygame.draw.rect(self.screen, Config.COLORS['WHITE'], resource_bar_rect, 2)
+        
+        # 资源百分比文字
+        percentage_text = f"{int(resource_percentage * 100)}%"
+        percentage_surface = self.small_font.render(percentage_text, True, Config.COLORS['WHITE'])
+        percentage_rect = percentage_surface.get_rect(center=resource_bar_rect.center)
+        self.screen.blit(percentage_surface, percentage_rect)
     
     def _render_monsters_area(self):
         """渲染怪物区域"""
-        pygame.draw.rect(self.screen, Config.COLORS['RED'], self.monsters_area, 2)
+        # 绘制阴影
+        shadow_rect = pygame.Rect(self.monsters_area.x + 3, self.monsters_area.y + 3, self.monsters_area.width, self.monsters_area.height)
+        pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], shadow_rect)
+        
+        # 绘制主体背景
+        pygame.draw.rect(self.screen, Config.COLORS['PANEL_BG'], self.monsters_area)
+        pygame.draw.rect(self.screen, Config.COLORS['DANGER'], self.monsters_area, 2)
+        
+        # 标题栏
+        title_rect = pygame.Rect(self.monsters_area.x, self.monsters_area.y, self.monsters_area.width, 25)
+        pygame.draw.rect(self.screen, Config.COLORS['DANGER'], title_rect)
         
         # 标题
-        monster_title = self.font.render("怪物", True, Config.COLORS['WHITE'])
-        self.screen.blit(monster_title, (self.monsters_area.x + 5, self.monsters_area.y + 5))
+        monster_title = self.font.render("👹 敌方单位", True, Config.COLORS['WHITE'])
+        title_text_rect = monster_title.get_rect(center=(title_rect.centerx, title_rect.centery))
+        self.screen.blit(monster_title, title_text_rect)
         
         # 怪物列表
         battle_state = self.battle.get_battle_state()
         monsters = battle_state['monsters']
         self.monster_buttons.clear()
         
-        y_offset = 30
+        y_offset = 35
         for monster in monsters:
             monster_rect = pygame.Rect(
                 self.monsters_area.x + 10,
                 self.monsters_area.y + y_offset,
-                330, 60
+                330, 55
             )
+            
+            # 怪物卡片阴影
+            card_shadow = pygame.Rect(monster_rect.x + 2, monster_rect.y + 2, monster_rect.width, monster_rect.height)
+            pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], card_shadow)
             
             if monster['alive']:
                 self.monster_buttons[monster['id']] = monster_rect
                 
                 # 怪物背景色
                 if self.show_target_selection and self.selected_target == monster['id']:
-                    bg_color = Config.COLORS['YELLOW']
+                    bg_color = Config.COLORS['ACCENT']
+                    border_color = Config.COLORS['PRIMARY']
                 elif monster['alive']:
                     bg_color = Config.COLORS['DARK_RED']
+                    border_color = Config.COLORS['DANGER']
                 else:
-                    bg_color = Config.COLORS['GRAY']
+                    bg_color = Config.COLORS['DARK_GRAY']
+                    border_color = Config.COLORS['GRAY']
             else:
-                bg_color = Config.COLORS['GRAY']
+                bg_color = Config.COLORS['DARK_GRAY']
+                border_color = Config.COLORS['GRAY']
             
             pygame.draw.rect(self.screen, bg_color, monster_rect)
-            pygame.draw.rect(self.screen, Config.COLORS['WHITE'], monster_rect, 2)
+            pygame.draw.rect(self.screen, border_color, monster_rect, 2)
             
-            # 怪物信息
-            name_text = f"{monster['name']} (ID: {monster['id']})"
+            # 怪物图标和信息
+            monster_icons = {'哥布林': '👺', '兽人': '👹', '巨魔': '🧌', '骷髅': '💀', '恶魔': '😈'}
+            icon = monster_icons.get(monster['name'], '👹')
+            
+            # 怪物名称和图标
+            name_text = f"{icon} {monster['name']} #{monster['id']}"
             name_surface = self.small_font.render(name_text, True, Config.COLORS['WHITE'])
-            self.screen.blit(name_surface, (monster_rect.x + 5, monster_rect.y + 5))
+            self.screen.blit(name_surface, (monster_rect.x + 8, monster_rect.y + 5))
             
-            hp_text = f"HP: {monster['current_hp']}/{monster['max_hp']}"
+            # HP信息
+            hp_text = f"❤️ {monster['current_hp']}/{monster['max_hp']}"
             hp_surface = self.small_font.render(hp_text, True, Config.COLORS['WHITE'])
-            self.screen.blit(hp_surface, (monster_rect.x + 5, monster_rect.y + 25))
+            self.screen.blit(hp_surface, (monster_rect.x + 8, monster_rect.y + 22))
             
-            # 血量条
-            hp_bar_rect = pygame.Rect(monster_rect.x + 5, monster_rect.y + 45, 200, 10)
-            pygame.draw.rect(self.screen, Config.COLORS['RED'], hp_bar_rect)
+            # 现代化血量条
+            hp_bar_rect = pygame.Rect(monster_rect.x + 8, monster_rect.y + 40, 200, 12)
+            # 血量条阴影
+            hp_bar_shadow = pygame.Rect(hp_bar_rect.x + 1, hp_bar_rect.y + 1, hp_bar_rect.width, hp_bar_rect.height)
+            pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], hp_bar_shadow)
+            
+            # 血量条背景
+            pygame.draw.rect(self.screen, Config.COLORS['DARK_GRAY'], hp_bar_rect)
             
             if monster['max_hp'] > 0:
                 hp_fill_width = int(hp_bar_rect.width * monster['hp_percentage'])
-                hp_fill_rect = pygame.Rect(hp_bar_rect.x, hp_bar_rect.y, hp_fill_width, hp_bar_rect.height)
-                pygame.draw.rect(self.screen, Config.COLORS['GREEN'], hp_fill_rect)
+                if hp_fill_width > 0:
+                    hp_fill_rect = pygame.Rect(hp_bar_rect.x, hp_bar_rect.y, hp_fill_width, hp_bar_rect.height)
+                    # 根据血量百分比选择颜色
+                    if monster['hp_percentage'] > 0.6:
+                        hp_color = Config.COLORS['SUCCESS']
+                    elif monster['hp_percentage'] > 0.3:
+                        hp_color = Config.COLORS['WARNING']
+                    else:
+                        hp_color = Config.COLORS['DANGER']
+                    pygame.draw.rect(self.screen, hp_color, hp_fill_rect)
             
             pygame.draw.rect(self.screen, Config.COLORS['WHITE'], hp_bar_rect, 1)
             
-            # 状态文本
-            status_text = "存活" if monster['alive'] else "已死亡"
-            status_color = Config.COLORS['GREEN'] if monster['alive'] else Config.COLORS['RED']
-            status_surface = self.small_font.render(status_text, True, status_color)
-            self.screen.blit(status_surface, (monster_rect.x + 250, monster_rect.y + 25))
+            # 状态标识
+            if monster['alive']:
+                status_text = "🟢 存活"
+                status_color = Config.COLORS['SUCCESS']
+            else:
+                status_text = "💀 已死亡"
+                status_color = Config.COLORS['DANGER']
             
-            y_offset += 70
+            status_surface = self.small_font.render(status_text, True, status_color)
+            self.screen.blit(status_surface, (monster_rect.x + 240, monster_rect.y + 22))
+            
+            y_offset += 65
     
     def _render_target_selection(self):
         """渲染目标选择区域"""
-        pygame.draw.rect(self.screen, Config.COLORS['PURPLE'], self.target_selection_area, 3)
+        # 绘制阴影
+        shadow_rect = pygame.Rect(self.target_selection_area.x + 3, self.target_selection_area.y + 3, 
+                                self.target_selection_area.width, self.target_selection_area.height)
+        pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], shadow_rect)
         
-        # 半透明背景
-        overlay = pygame.Surface((self.target_selection_area.width, self.target_selection_area.height))
-        overlay.set_alpha(200)
-        overlay.fill(Config.COLORS['BLACK'])
-        self.screen.blit(overlay, self.target_selection_area.topleft)
+        # 主体背景
+        pygame.draw.rect(self.screen, Config.COLORS['PANEL_BG'], self.target_selection_area)
+        pygame.draw.rect(self.screen, Config.COLORS['ACCENT'], self.target_selection_area, 3)
+        
+        # 标题栏
+        title_rect = pygame.Rect(self.target_selection_area.x, self.target_selection_area.y, 
+                               self.target_selection_area.width, 25)
+        pygame.draw.rect(self.screen, Config.COLORS['ACCENT'], title_rect)
         
         # 标题
-        title_text = self.font.render(f"选择攻击目标 - {Config.SKILLS[self.selected_skill]['name']}", True, Config.COLORS['WHITE'])
-        self.screen.blit(title_text, (self.target_selection_area.x + 10, self.target_selection_area.y + 10))
+        skill_name = Config.SKILLS[self.selected_skill]['name']
+        title_text = self.font.render(f"🎯 选择目标 - {skill_name}", True, Config.COLORS['WHITE'])
+        title_text_rect = title_text.get_rect(center=(title_rect.centerx, title_rect.centery))
+        self.screen.blit(title_text, title_text_rect)
         
         # 提示文本
-        hint_text = "点击上方怪物选择目标，然后点击确认"
-        hint_surface = self.small_font.render(hint_text, True, Config.COLORS['WHITE'])
-        self.screen.blit(hint_surface, (self.target_selection_area.x + 10, self.target_selection_area.y + 40))
+        hint_text = "💡 点击上方怪物选择目标，然后点击确认"
+        hint_surface = self.small_font.render(hint_text, True, Config.COLORS['INFO'])
+        self.screen.blit(hint_surface, (self.target_selection_area.x + 15, self.target_selection_area.y + 35))
         
         # 选中的目标信息
         if self.selected_target is not None:
             battle_state = self.battle.get_battle_state()
             target_monster = next((m for m in battle_state['monsters'] if m['id'] == self.selected_target), None)
             if target_monster:
-                target_text = f"选中目标: {target_monster['name']} (HP: {target_monster['current_hp']}/{target_monster['max_hp']})"
-                target_surface = self.small_font.render(target_text, True, Config.COLORS['YELLOW'])
-                self.screen.blit(target_surface, (self.target_selection_area.x + 10, self.target_selection_area.y + 65))
+                target_text = f"✅ 已选中: {target_monster['name']} (❤️ {target_monster['current_hp']}/{target_monster['max_hp']})"
+                target_surface = self.small_font.render(target_text, True, Config.COLORS['SUCCESS'])
+                self.screen.blit(target_surface, (self.target_selection_area.x + 15, self.target_selection_area.y + 55))
         
-        # 按钮
+        # 现代化按钮
+        # 确认按钮阴影
+        confirm_shadow = pygame.Rect(self.confirm_button.x + 2, self.confirm_button.y + 2, 
+                                   self.confirm_button.width, self.confirm_button.height)
+        pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], confirm_shadow)
+        
         # 确认按钮
-        confirm_color = Config.COLORS['GREEN'] if self.selected_target is not None else Config.COLORS['GRAY']
+        if self.selected_target is not None:
+            confirm_color = Config.COLORS['SUCCESS']
+            confirm_border = Config.COLORS['SUCCESS']
+            confirm_text_color = Config.COLORS['WHITE']
+        else:
+            confirm_color = Config.COLORS['DARK_GRAY']
+            confirm_border = Config.COLORS['GRAY']
+            confirm_text_color = Config.COLORS['GRAY']
+            
         pygame.draw.rect(self.screen, confirm_color, self.confirm_button)
-        pygame.draw.rect(self.screen, Config.COLORS['WHITE'], self.confirm_button, 2)
-        confirm_text = self.small_font.render("确认", True, Config.COLORS['BLACK'])
+        pygame.draw.rect(self.screen, confirm_border, self.confirm_button, 2)
+        confirm_text = self.small_font.render("✅ 确认", True, confirm_text_color)
         confirm_rect = confirm_text.get_rect(center=self.confirm_button.center)
         self.screen.blit(confirm_text, confirm_rect)
         
+        # 取消按钮阴影
+        cancel_shadow = pygame.Rect(self.cancel_button.x + 2, self.cancel_button.y + 2, 
+                                  self.cancel_button.width, self.cancel_button.height)
+        pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], cancel_shadow)
+        
         # 取消按钮
-        pygame.draw.rect(self.screen, Config.COLORS['RED'], self.cancel_button)
-        pygame.draw.rect(self.screen, Config.COLORS['WHITE'], self.cancel_button, 2)
-        cancel_text = self.small_font.render("取消", True, Config.COLORS['WHITE'])
+        pygame.draw.rect(self.screen, Config.COLORS['DANGER'], self.cancel_button)
+        pygame.draw.rect(self.screen, Config.COLORS['DANGER'], self.cancel_button, 2)
+        cancel_text = self.small_font.render("❌ 取消", True, Config.COLORS['WHITE'])
         cancel_rect = cancel_text.get_rect(center=self.cancel_button.center)
         self.screen.blit(cancel_text, cancel_rect)
     
@@ -579,12 +722,17 @@ class MultiMonsterBattleUI:
         if not self.battle.battle_active or self.show_target_selection or self.show_strategy_result:
             return
         
+        # 按钮阴影
+        shadow_button = pygame.Rect(self.strategy_button.x + 2, self.strategy_button.y + 2, 
+                                   self.strategy_button.width, self.strategy_button.height)
+        pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], shadow_button)
+        
         # 按钮背景
-        pygame.draw.rect(self.screen, Config.COLORS['PURPLE'], self.strategy_button)
-        pygame.draw.rect(self.screen, Config.COLORS['WHITE'], self.strategy_button, 2)
+        pygame.draw.rect(self.screen, Config.COLORS['ACCENT'], self.strategy_button)
+        pygame.draw.rect(self.screen, Config.COLORS['PRIMARY'], self.strategy_button, 2)
         
         # 按钮文字
-        button_text = self.small_font.render("BOSS战策略优化", True, Config.COLORS['WHITE'])
+        button_text = self.small_font.render("🧠 BOSS战策略优化", True, Config.COLORS['WHITE'])
         text_rect = button_text.get_rect(center=self.strategy_button.center)
         self.screen.blit(button_text, text_rect)
     
@@ -598,15 +746,26 @@ class MultiMonsterBattleUI:
         
         # 结果窗口
         result_rect = pygame.Rect(100, 100, 600, 520)
-        pygame.draw.rect(self.screen, Config.COLORS['BLUE'], result_rect)
-        pygame.draw.rect(self.screen, Config.COLORS['WHITE'], result_rect, 3)
+        
+        # 窗口阴影
+        shadow_rect = pygame.Rect(result_rect.x + 4, result_rect.y + 4,
+                                 result_rect.width, result_rect.height)
+        pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], shadow_rect)
+        
+        pygame.draw.rect(self.screen, Config.COLORS['PANEL_BG'], result_rect)
+        pygame.draw.rect(self.screen, Config.COLORS['PRIMARY'], result_rect, 3)
         
         # 创建可滚动内容区域
         content_rect = pygame.Rect(result_rect.x + 10, result_rect.y + 60, result_rect.width - 20, result_rect.height - 100)
         
+        # 标题栏背景
+        title_bar = pygame.Rect(result_rect.x, result_rect.y, result_rect.width, 40)
+        pygame.draw.rect(self.screen, Config.COLORS['SUCCESS'], title_bar)
+        
         # 标题（固定位置）
-        title_text = self.title_font.render("BOSS战策略优化结果", True, Config.COLORS['WHITE'])
-        self.screen.blit(title_text, (result_rect.x + 20, result_rect.y + 20))
+        title_text = self.title_font.render("🎯 BOSS战策略优化结果", True, Config.COLORS['WHITE'])
+        title_rect = title_text.get_rect(center=(title_bar.centerx, title_bar.centery))
+        self.screen.blit(title_text, title_rect)
         
         # 创建内容表面用于滚动
         content_surface = pygame.Surface((content_rect.width, 2000))  # 足够大的表面
@@ -690,18 +849,26 @@ class MultiMonsterBattleUI:
         # 绘制滚动条（如果需要）
         if self.max_scroll_offset > 0:
             scrollbar_rect = pygame.Rect(result_rect.x + result_rect.width - 15, content_rect.y, 10, content_rect.height)
-            pygame.draw.rect(self.screen, Config.COLORS['GRAY'], scrollbar_rect)
+            # 滚动条背景
+            pygame.draw.rect(self.screen, Config.COLORS['DARK_GRAY'], scrollbar_rect)
+            pygame.draw.rect(self.screen, Config.COLORS['GRAY'], scrollbar_rect, 1)
             
             # 滚动条滑块
             thumb_height = max(20, int(content_rect.height * content_rect.height / content_height))
             thumb_y = content_rect.y + int(self.scroll_offset * (content_rect.height - thumb_height) / self.max_scroll_offset)
-            thumb_rect = pygame.Rect(scrollbar_rect.x, thumb_y, scrollbar_rect.width, thumb_height)
-            pygame.draw.rect(self.screen, Config.COLORS['WHITE'], thumb_rect)
+            thumb_rect = pygame.Rect(scrollbar_rect.x + 1, thumb_y, scrollbar_rect.width - 2, thumb_height)
+            pygame.draw.rect(self.screen, Config.COLORS['ACCENT'], thumb_rect)
+            pygame.draw.rect(self.screen, Config.COLORS['PRIMARY'], thumb_rect, 1)
+        
+        # 关闭提示背景
+        hint_bg = pygame.Rect(result_rect.x, result_rect.y + result_rect.height - 35,
+                             result_rect.width, 35)
+        pygame.draw.rect(self.screen, Config.COLORS['INFO'], hint_bg)
         
         # 关闭提示和滚动提示（固定位置）
-        close_hint = self.small_font.render("按ESC键关闭", True, Config.COLORS['GRAY'])
-        self.screen.blit(close_hint, (result_rect.x + result_rect.width - 120, result_rect.y + result_rect.height - 30))
-        
         if self.max_scroll_offset > 0:
-            scroll_hint = self.small_font.render("使用滚轮上下滚动", True, Config.COLORS['GRAY'])
-            self.screen.blit(scroll_hint, (result_rect.x + 20, result_rect.y + result_rect.height - 30))
+            hint_text = self.small_font.render("⌨️ 按ESC关闭 | 🖱️ 滚轮滚动", True, Config.COLORS['WHITE'])
+        else:
+            hint_text = self.small_font.render("⌨️ 按ESC键关闭", True, Config.COLORS['WHITE'])
+        hint_rect = hint_text.get_rect(center=(hint_bg.centerx, hint_bg.centery))
+        self.screen.blit(hint_text, hint_rect)
