@@ -108,25 +108,29 @@ class PathPlanner:
     def _fill_dp_table_from_start(self, start_pos: Tuple[int, int]):
         """
         从指定起点使用动态规划填充DP表
-        双重优化目标：首先最大化资源，然后最小化步数
+        优化目标：最大化资源收集效率（资源/步数比）
         
         Args:
             start_pos: 起点位置
         """
-        # 使用BFS进行层次遍历，确保按步数递增的顺序处理
-        from collections import deque
+        # 使用优先队列进行效率优先的路径搜索
+        import heapq
         
-        queue = deque([(start_pos, 0)])  # (位置, 步数)
+        # 优先队列：(-效率值, 步数, 位置)
+        # 使用负效率值是因为heapq是最小堆，我们要最大效率
+        queue = []
+        heapq.heappush(queue, (0, 0, start_pos))  # 起点效率为0
         visited = set()
         
         while queue:
-            current_pos, steps = queue.popleft()
+            neg_efficiency, steps, current_pos = heapq.heappop(queue)
             
             if current_pos in visited:
                 continue
             visited.add(current_pos)
             
             x, y = current_pos
+            current_value, current_steps = self.dp[x][y]
             
             # 四个方向的移动
             directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
@@ -140,47 +144,51 @@ class PathPlanner:
                     self.maze[next_x][next_y] != Config.WALL):
                     
                     # 计算到达下一个位置的资源值和步数
-                    current_value, current_steps = self.dp[x][y]
                     next_value = current_value + self._get_cell_value(next_x, next_y)
                     next_steps = current_steps + 1
                     
+                    # 计算效率值（资源/步数比，避免除零）
+                    next_efficiency = next_value / max(1, next_steps)
+                    
                     # 获取下一个位置的当前最优值
                     existing_value, existing_steps = self.dp[next_x][next_y]
+                    existing_efficiency = existing_value / max(1, existing_steps) if existing_steps > 0 else 0
                     
-                    # 智能路径选择：避免不必要的陷阱
+                    # 效率优先的智能路径选择
                     should_update = False
                     
                     # 检查下一个位置是否是陷阱
                     is_trap = self.maze[next_x][next_y] == Config.TRAP
                     
-                    if next_value > existing_value:
-                        # 如果资源值更高，但是陷阱，需要额外判断
+                    # 主要判断：效率优先
+                    if next_efficiency > existing_efficiency:
+                        # 效率更高的路径
                         if is_trap:
-                            # 只有当资源收益明显大于陷阱损失时才踩陷阱
-                            resource_gain = next_value - existing_value
-                            step_penalty = (next_steps - existing_steps) * 0.1  # 步数惩罚
-                            if resource_gain > Config.TRAP_RESOURCE_COST + step_penalty:
+                            # 陷阱路径需要效率明显更高才选择
+                            efficiency_gain = next_efficiency - existing_efficiency
+                            if efficiency_gain > 0.5:  # 效率提升阈值
                                 should_update = True
                         else:
                             should_update = True
-                    elif next_value == existing_value:
-                        # 资源值相同时，优先选择非陷阱路径
+                    elif abs(next_efficiency - existing_efficiency) < 0.1:  # 效率相近
+                        # 效率相近时，优先选择非陷阱且步数更少的路径
                         if not is_trap and next_steps <= existing_steps:
                             should_update = True
-                        elif is_trap and next_steps < existing_steps - 2:  # 陷阱路径需要明显更短才选择
+                        elif is_trap and next_steps < existing_steps - 3:  # 陷阱路径需要明显更短
                             should_update = True
-                    elif next_value >= existing_value - Config.TRAP_RESOURCE_COST:
-                        # 资源值略低但能避免陷阱，且步数相近时优先选择
-                        if not is_trap and next_steps <= existing_steps + 1:
+                    elif next_efficiency > existing_efficiency - 0.2:  # 效率略低但可接受
+                        # 效率略低但能避免陷阱的路径
+                        if not is_trap and next_steps <= existing_steps + 2:
                             should_update = True
                     
                     if should_update:
                         self.dp[next_x][next_y] = (next_value, next_steps)
                         self.parent[next_x][next_y] = current_pos
                         
-                        # 将下一个位置加入队列继续探索
+                        # 将下一个位置加入优先队列，按效率排序
                         if next_pos not in visited:
-                            queue.append((next_pos, next_steps))
+                            # 使用负效率值，因为heapq是最小堆
+                            heapq.heappush(queue, (-next_efficiency, next_steps, next_pos))
     
     def _build_graph_structure(self):
         """
