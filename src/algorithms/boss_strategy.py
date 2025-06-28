@@ -351,47 +351,7 @@ class BossStrategy:
             'battle_log': simulation['battle_log']
         }
     
-    def compare_strategies(self, strategies: List[List[str]]) -> Dict:
-        """
-        比较多个策略
-        
-        Args:
-            strategies: 策略列表
-        
-        Returns:
-            Dict: 比较结果
-        """
-        results = []
-        
-        for i, strategy in enumerate(strategies):
-            analysis = self.analyze_strategy_efficiency(strategy)
-            analysis['strategy_id'] = i
-            analysis['strategy'] = strategy
-            results.append(analysis)
-        
-        # 找出最优策略
-        valid_results = [r for r in results if r.get('valid', False)]
-        
-        if not valid_results:
-            return {
-                'best_strategy': None,
-                'all_results': results
-            }
-        
-        # 按回合数排序，回合数相同则按伤害效率排序
-        best_strategy = min(valid_results, 
-                          key=lambda x: (x['rounds_used'], -x['damage_efficiency']))
-        
-        return {
-            'best_strategy': best_strategy,
-            'all_results': results,
-            'comparison_metrics': {
-                'min_rounds': min(r['rounds_used'] for r in valid_results),
-                'max_rounds': max(r['rounds_used'] for r in valid_results),
-                'avg_rounds': sum(r['rounds_used'] for r in valid_results) / len(valid_results),
-                'best_efficiency': max(r['damage_efficiency'] for r in valid_results)
-            }
-        }
+
     
     def generate_random_strategies(self, count: int = 5, max_length: int = 15) -> List[List[str]]:
         """

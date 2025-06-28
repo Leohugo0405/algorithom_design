@@ -139,7 +139,7 @@ class ResourcePathPlanner:
     
     def _calculate_path_value(self, path: List[Tuple[int, int]]) -> int:
         """
-        计算路径的总价值
+        计算路径的总价值（只计算资源格子的价值）
         
         Args:
             path: 路径坐标列表
@@ -149,7 +149,12 @@ class ResourcePathPlanner:
         """
         total_value = 0
         for x, y in path:
-            total_value += self._get_cell_value(x, y)
+            cell = self.maze[x][y]
+            if cell == Config.GOLD:
+                total_value += Config.RESOURCE_VALUE
+            elif cell == Config.TRAP:
+                total_value += -Config.TRAP_RESOURCE_COST
+            # 普通路径格子不计算价值
         return total_value
     
     def find_optimal_resource_path(self, max_resources: int = None) -> Dict:
@@ -196,6 +201,7 @@ class ResourcePathPlanner:
     def _solve_resource_collection_tsp(self, max_resources: int) -> Dict:
         """
         使用动态规划解决资源收集的TSP变种问题
+        不考虑最小步数，专注于最大化资源收集价值
         
         Args:
             max_resources: 最大资源收集数量
@@ -203,9 +209,9 @@ class ResourcePathPlanner:
         Returns:
             Dict: 最优解结果
         """
-        # 按价值/距离比排序资源，优先考虑高价值资源
+        # 按资源价值排序，不考虑距离因素
         sorted_resources = sorted(self.resources, 
-                                key=lambda r: r['value'] / max(1, self._manhattan_distance(self.start_pos, r['position'])), 
+                                key=lambda r: r['value'], 
                                 reverse=True)
         
         best_path = []
@@ -313,29 +319,19 @@ class ResourcePathPlanner:
     
     def _nearest_neighbor_order(self, resources: List[Dict]) -> List[Dict]:
         """
-        使用最近邻算法确定资源访问顺序
+        按资源价值确定访问顺序，不考虑距离因素
         
         Args:
             resources: 资源列表
         
         Returns:
-            List[Dict]: 排序后的资源列表
+            List[Dict]: 按价值排序的资源列表
         """
         if not resources:
             return []
         
-        unvisited = resources.copy()
-        ordered = []
-        current_pos = self.start_pos
-        
-        while unvisited:
-            # 找到距离当前位置最近的资源
-            nearest = min(unvisited, 
-                         key=lambda r: self._manhattan_distance(current_pos, r['position']))
-            
-            ordered.append(nearest)
-            unvisited.remove(nearest)
-            current_pos = nearest['position']
+        # 直接按价值从高到低排序，不考虑距离
+        ordered = sorted(resources, key=lambda r: r['value'], reverse=True)
         
         return ordered
     
@@ -412,8 +408,8 @@ class ResourcePathPlanner:
         # 计算绕路比例
         detour_ratio = (path_length / max(1, direct_path_length)) - 1
         
-        # 计算效率（价值/路径长度）
-        efficiency = total_value / max(1, path_length)
+        # 计算效率（主要关注总价值，步数为次要因素）
+        efficiency = total_value  # 不再除以路径长度，专注于总价值
         
         return {
             'path_length': path_length,
@@ -422,7 +418,7 @@ class ResourcePathPlanner:
             'resources_collected': resources_collected,
             'direct_path_length': direct_path_length,
             'detour_ratio': detour_ratio,
-            'value_per_step': total_value / max(1, path_length)
+            'resource_value_priority': total_value  # 新增：资源价值优先指标
         }
     
     def get_alternative_paths(self, num_alternatives: int = 3) -> List[Dict]:
@@ -459,14 +455,14 @@ class ResourcePathPlanner:
                 'strategy': 'direct_path'
             })
         
-        # 方案3：贪心路径（只收集正价值资源）
+        # 方案3：全资源收集路径（收集所有正价值资源）
         positive_resources = [r for r in self.resources if r['value'] > 0]
         if positive_resources:
-            greedy_result = self._find_path_through_resources(positive_resources[:3])  # 限制前3个
+            greedy_result = self._find_path_through_resources(positive_resources)  # 收集所有正价值资源
             if greedy_result['success']:
                 alternatives.append({
-                    'name': '贪心收集路径',
-                    'description': '收集前几个高价值资源',
+                    'name': '全资源收集路径',
+                    'description': '收集所有正价值资源，不考虑路径长度',
                     **greedy_result
                 })
         
@@ -474,3 +470,50 @@ class ResourcePathPlanner:
         alternatives.sort(key=lambda x: x.get('total_value', 0), reverse=True)
         
         return alternatives[:num_alternatives]
+    
+    def find_maximum_value_path(self) -> Dict:
+        """
+        找到最大价值路径，完全不考虑步数限制
+        优先收集所有正价值资源，避免负价值资源
+        
+        Returns:
+            Dict: 最大价值路径结果
+        """
+        if not self.start_pos or not self.exit_pos:
+            return {
+                'success': False,
+                'message': '未找到起点或终点',
+                'path': [],
+                'total_value': 0
+            }
+        
+        # 分离正价值和负价值资源
+        positive_resources = [r for r in self.resources if r['value'] > 0]
+        negative_resources = [r for r in self.resources if r['value'] < 0]
+        
+        # 按价值排序正价值资源（从高到低）
+        positive_resources.sort(key=lambda r: r['value'], reverse=True)
+        
+        # 尝试收集所有正价值资源
+        if positive_resources:
+            result = self._find_path_through_resources(positive_resources)
+            if result['success']:
+                return {
+                    'success': True,
+                    'path': result['path'],
+                    'total_value': result['total_value'],
+                    'resources_collected': result['resources_collected'],
+                    'strategy': 'maximum_value_collection',
+                    'positive_resources': len(positive_resources),
+                    'negative_resources_avoided': len(negative_resources)
+                }
+        
+        # 如果无法收集资源，返回直接路径
+        direct_path = self._a_star_path(self.start_pos, self.exit_pos)
+        return {
+            'success': True,
+            'path': direct_path,
+            'total_value': self._calculate_path_value(direct_path),
+            'resources_collected': [],
+            'strategy': 'direct_path_fallback'
+        }

@@ -337,9 +337,7 @@ class GameUI:
             if not self.paused and not self.game_completed:
                 self._stop_visual_navigation()
         
-        elif key == pygame.K_c:
-            # 比较路径策略
-            self._compare_path_strategies()
+
         
         elif key == pygame.K_p:
             # 显示资源路径规划
@@ -484,20 +482,7 @@ class GameUI:
         else:
             self.add_message("贪心路径计算失败")
     
-    def _compare_path_strategies(self):
-        """
-        比较路径策略
-        """
-        result = self.game_engine.compare_path_strategies()
-        if result['success']:
-            comparison = result['comparison']
-            improvement = comparison['improvement']
-            
-            self.add_message(f"路径比较完成:")
-            self.add_message(f"DP路径长度: {len(comparison['dp_path']['path'])}, 贪心路径长度: {len(comparison['greedy_path']['path'])}")
 
-        else:
-            self.add_message("路径比较失败")
     
     def _handle_lock_encounter(self, interaction: Dict):
         """
@@ -1124,7 +1109,7 @@ class GameUI:
             ("🗺️", "路径方案", "M", Config.COLORS['PURPLE']),
             ("👁️", "切换显示", "V", Config.COLORS['BLUE']),
             ("📊", "路径规划", "P", Config.COLORS['GOLD']),
-            ("⚖️", "策略比较", "C", Config.COLORS['ORANGE']),
+
             ("🔄", "重新开始", "R", Config.COLORS['DANGER']),
             ("⏸️", "暂停/继续", "Space", Config.COLORS['LIME']),
             ("❓", "帮助开关", "H", Config.COLORS['TEAL']),
@@ -1459,7 +1444,7 @@ class GameUI:
             self.add_message("游戏未开始、已结束或已暂停")
             return
         
-        result = self.game_engine.get_auto_navigation_to_nearest_resource()
+        result = self.game_engine.get_auto_navigation_to_highest_value_resource()
         
         if result['success']:
             self.add_message(f"找到最近资源，距离{result['total_steps']}步")

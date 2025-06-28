@@ -563,11 +563,10 @@ class GameEngine:
     #         )
     #         
     #         random_strategies = boss_strategy.generate_random_strategies(count=10)
-    #         comparison = boss_strategy.compare_strategies(random_strategies)
-    #         
-    #         if comparison['best_strategy']:
-    #             best_strategy = comparison['best_strategy']['strategy']
-    #             battle_result = boss_strategy.simulate_battle(best_strategy)
+        #         
+        #         # 使用最优策略进行战斗
+        #         best_strategy = ['normal_attack'] * 10  # 简化策略
+        #         battle_result = boss_strategy.simulate_battle(best_strategy)
     #             
     #             if battle_result['success']:
     #                 self.defeated_bosses.add(self.active_battle['position'])
@@ -738,28 +737,7 @@ class GameEngine:
             'efficiency_analysis': efficiency_analysis
         }
     
-    def compare_path_strategies(self) -> Dict:
-        """
-        比较动态规划和贪心策略的路径
-        
-        Returns:
-            Dict: 路径策略比较结果
-        """
-        dp_result = self.get_optimal_path()
-        greedy_result = self.get_greedy_path()
-        
-        if not dp_result['success'] or not greedy_result['success']:
-            return {'success': False, 'message': '路径计算失败'}
-        
-        # 使用路径规划器的比较功能
-        comparison = self.path_planner.compare_with_greedy(greedy_result['greedy_path'])
-        
-        return {
-            'success': True,
-            'dp_result': dp_result,
-            'greedy_result': greedy_result,
-            'comparison': comparison
-        }
+
     
     def toggle_auto_pickup(self) -> Dict:
         """
@@ -1197,7 +1175,8 @@ class GameEngine:
         self.resource_path_planner.start_pos = self.player_pos
         
         try:
-            result = self.resource_path_planner.find_optimal_resource_path(max_resources)
+            # 使用新的最大价值路径方法，不考虑步数限制
+            result = self.resource_path_planner.find_maximum_value_path()
             return result
         finally:
             # 恢复原始起点
@@ -1238,9 +1217,9 @@ class GameEngine:
             'message': f'找到到达出口的路径，共需{len(steps)}步'
         }
     
-    def get_auto_navigation_to_nearest_resource(self) -> Dict:
+    def get_auto_navigation_to_highest_value_resource(self) -> Dict:
         """
-        获取到最近资源的自动导航路径
+        获取到最高价值资源的自动导航路径（不考虑距离）
         
         Returns:
             Dict: 导航结果
@@ -1266,12 +1245,11 @@ class GameEngine:
                 'steps': []
             }
         
-        # 找到最近的资源
-        nearest_resource = min(available_resources, 
-                             key=lambda r: self.resource_path_planner._manhattan_distance(
-                                 self.player_pos, r['position']))
+        # 找到价值最高的资源
+        highest_value_resource = max(available_resources, 
+                                   key=lambda r: r['value'])
         
-        target_pos = nearest_resource['position']
+        target_pos = highest_value_resource['position']
         path = self.resource_path_planner._a_star_path(self.player_pos, target_pos)
         
         if not path:

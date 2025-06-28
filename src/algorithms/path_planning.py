@@ -381,34 +381,3 @@ class PathPlanner:
         # 按价值降序排序
         all_paths.sort(key=lambda x: x[1], reverse=True)
         return all_paths
-    
-    def compare_with_greedy(self, greedy_path: List[Tuple[int, int]]) -> Dict:
-        """
-        比较动态规划路径与贪心路径
-        
-        Args:
-            greedy_path: 贪心算法得到的路径
-        
-        Returns:
-            Dict: 比较结果
-        """
-        dp_value, dp_path = self.find_optimal_path()
-        dp_details = self.get_path_details(dp_path)
-        greedy_details = self.get_path_details(greedy_path)
-        
-        return {
-            'dp_path': {
-                'path': dp_path,
-                'value': dp_value,
-                'details': dp_details
-            },
-            'greedy_path': {
-                'path': greedy_path,
-                'details': greedy_details
-            },
-            'improvement': {
-                'value_diff': dp_value - greedy_details['total_value'],
-                'length_diff': dp_details['length'] - greedy_details['length'],
-                'efficiency': dp_value / dp_details['length'] if dp_details['length'] > 0 else 0
-            }
-        }
