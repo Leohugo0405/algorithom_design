@@ -60,6 +60,12 @@ class GameUI:
         # 迷宫大小设置
         self.selected_maze_size = Config.DEFAULT_MAZE_SIZE
         
+        # JSON文件加载相关
+        self.show_load_json = False  # 显示JSON文件加载界面
+        self.json_file_path = ""  # 当前输入的文件路径
+        self.available_json_files = []  # 可用的JSON文件列表
+        self.selected_json_index = 0  # 当前选中的JSON文件索引
+        
         # 可视化导航相关
         self.visual_navigation_active = False
         self.visual_navigation_timer = 0
@@ -67,6 +73,9 @@ class GameUI:
         
         # 初始化pygame
         self._initialize_pygame()
+        
+        # 扫描可用的JSON文件
+        self._scan_available_json_files()
     
     def _initialize_pygame(self):
         """
@@ -215,6 +224,9 @@ class GameUI:
             # 如果显示设置界面
             if self.show_settings:
                 self._draw_settings_screen()
+            # 如果显示JSON加载界面
+            elif self.show_load_json:
+                self._draw_load_json_screen()
             # 游戏已开始，渲染游戏界面
             elif self.game_started:
                 self._render()
@@ -277,6 +289,41 @@ class GameUI:
                 # 减少迷宫大小
                 if self.selected_maze_size > Config.MIN_MAZE_SIZE:
                     self.selected_maze_size -= 2  # 保持奇数
+            elif key == pygame.K_l:
+                # 加载JSON文件
+                self.show_settings = False
+                self.show_load_json = True
+                self.selected_json_index = 0  # 重置选择索引
+            return
+        
+        elif self.show_load_json:
+            # JSON加载界面的按键处理
+            if key == pygame.K_ESCAPE:
+                # 返回设置界面
+                self.show_load_json = False
+                self.show_settings = True
+            elif key == pygame.K_RETURN or key == pygame.K_KP_ENTER:
+                # 加载选中的JSON文件
+                if self.available_json_files:
+                    selected_file = self.available_json_files[self.selected_json_index]
+                    load_result = self.game_engine.load_maze_from_json(selected_file['path'])
+                    
+                    if load_result['success']:
+                        self.add_message("迷宫加载成功！")
+                        self.add_message(f"文件: {selected_file['name']}")
+                        self.add_message(f"大小: {load_result['maze_size']}x{load_result['maze_size']}")
+                        self.show_load_json = False
+                        self.game_started = True
+                    else:
+                        self.add_message(f"加载失败: {load_result['message']}")
+            elif key == pygame.K_UP:
+                # 向上选择
+                if self.available_json_files and self.selected_json_index > 0:
+                    self.selected_json_index -= 1
+            elif key == pygame.K_DOWN:
+                # 向下选择
+                if self.available_json_files and self.selected_json_index < len(self.available_json_files) - 1:
+                    self.selected_json_index += 1
             return
         
         if key == pygame.K_ESCAPE:
@@ -289,6 +336,7 @@ class GameUI:
         elif key == pygame.K_r:
             # 重新开始游戏
             self.show_settings = True
+            self.show_load_json = False  # 重置JSON加载界面状态
             self.game_started = False
             self.game_engine.maze = None
             self.optimal_path = []
@@ -1369,6 +1417,7 @@ class GameUI:
         controls = [
             ("⬆️⬇️", "调整迷宫大小", Config.COLORS['CYAN']),
             ("⏎", "开始游戏", Config.COLORS['SUCCESS']),
+            ("L", "加载JSON迷宫文件", Config.COLORS['INFO']),
             ("⎋", "退出游戏", Config.COLORS['DANGER'])
         ]
         
@@ -1594,6 +1643,139 @@ class GameUI:
             self.add_message("无可用路径方案")
         
         # 注意：显示更新在主循环中统一处理
+    
+    def _scan_available_json_files(self):
+        """
+        扫描可用的JSON迷宫文件
+        """
+        import os
+        import glob
+        
+        self.available_json_files = []
+        
+        # 扫描样例目录中的JSON文件
+        sample_dirs = [
+            "样例/迷宫动态规划样例",
+            "样例/BOSS战样例",
+            "样例/回溯法解密样例"
+        ]
+        
+        for sample_dir in sample_dirs:
+            if os.path.exists(sample_dir):
+                json_files = glob.glob(os.path.join(sample_dir, "*.json"))
+                for json_file in json_files:
+                    # 获取相对路径和文件名
+                    rel_path = os.path.relpath(json_file)
+                    filename = os.path.basename(json_file)
+                    self.available_json_files.append({
+                        'path': rel_path,
+                        'name': filename,
+                        'dir': sample_dir
+                    })
+        
+        # 按文件名排序
+        self.available_json_files.sort(key=lambda x: x['name'])
+    
+    def _draw_load_json_screen(self):
+        """
+        绘制JSON文件加载界面
+        """
+        # 创建背景
+        self.screen.fill(Config.COLORS['BLACK'])
+        
+        center_x = Config.WINDOW_WIDTH // 2
+        center_y = Config.WINDOW_HEIGHT // 2
+        
+        # 主标题
+        title_text = "📁 加载迷宫文件"
+        title_surface = self._render_mixed_text(title_text, 'normal', Config.COLORS['PRIMARY'])
+        title_rect = title_surface.get_rect(center=(center_x, 80))
+        self.screen.blit(title_surface, title_rect)
+        
+        # 如果没有找到JSON文件
+        if not self.available_json_files:
+            no_files_text = "未找到可用的JSON迷宫文件"
+            no_files_surface = self._render_mixed_text(no_files_text, 'normal', Config.COLORS['DANGER'])
+            no_files_rect = no_files_surface.get_rect(center=(center_x, center_y))
+            self.screen.blit(no_files_surface, no_files_rect)
+            
+            back_text = "按ESC返回主菜单"
+            back_surface = self._render_mixed_text(back_text, 'small', Config.COLORS['TEXT_SECONDARY'])
+            back_rect = back_surface.get_rect(center=(center_x, center_y + 50))
+            self.screen.blit(back_surface, back_rect)
+            return
+        
+        # 文件列表区域
+        list_y_start = 150
+        list_height = 400
+        item_height = 40
+        visible_items = list_height // item_height
+        
+        # 计算滚动偏移
+        scroll_offset = max(0, self.selected_json_index - visible_items // 2)
+        
+        # 绘制文件列表背景
+        list_rect = pygame.Rect(50, list_y_start, Config.WINDOW_WIDTH - 100, list_height)
+        pygame.draw.rect(self.screen, Config.COLORS['PANEL_BG'], list_rect)
+        pygame.draw.rect(self.screen, Config.COLORS['PRIMARY'], list_rect, 2)
+        
+        # 绘制文件列表
+        for i in range(visible_items):
+            file_index = scroll_offset + i
+            if file_index >= len(self.available_json_files):
+                break
+                
+            file_info = self.available_json_files[file_index]
+            item_y = list_y_start + i * item_height
+            
+            # 选中项高亮
+            if file_index == self.selected_json_index:
+                highlight_rect = pygame.Rect(55, item_y + 5, Config.WINDOW_WIDTH - 110, item_height - 10)
+                pygame.draw.rect(self.screen, Config.COLORS['HIGHLIGHT'], highlight_rect)
+            
+            # 文件名
+            name_surface = self._render_mixed_text(file_info['name'], 'small', 
+                                                 Config.COLORS['TEXT_PRIMARY'] if file_index != self.selected_json_index 
+                                                 else Config.COLORS['BLACK'])
+            name_rect = name_surface.get_rect(left=70, centery=item_y + item_height // 2)
+            self.screen.blit(name_surface, name_rect)
+            
+            # 目录信息
+            dir_surface = self._render_mixed_text(f"({file_info['dir']})", 'small', 
+                                                Config.COLORS['TEXT_SECONDARY'] if file_index != self.selected_json_index 
+                                                else Config.COLORS['GRAY'])
+            dir_rect = dir_surface.get_rect(right=Config.WINDOW_WIDTH - 70, centery=item_y + item_height // 2)
+            self.screen.blit(dir_surface, dir_rect)
+        
+        # 控制说明
+        controls_y = list_y_start + list_height + 30
+        
+        controls = [
+            ("⬆️⬇️", "选择文件", Config.COLORS['CYAN']),
+            ("⏎", "加载选中文件", Config.COLORS['SUCCESS']),
+            ("⎋", "返回主菜单", Config.COLORS['DANGER'])
+        ]
+        
+        for i, (icon, desc, color) in enumerate(controls):
+            item_y = controls_y + i * 25
+            
+            # 绘制图标
+            icon_surface = self._render_mixed_text(icon, 'small', color)
+            icon_rect = icon_surface.get_rect(center=(center_x - 80, item_y))
+            self.screen.blit(icon_surface, icon_rect)
+            
+            # 绘制说明
+            desc_surface = self._render_mixed_text(desc, 'small', Config.COLORS['TEXT_PRIMARY'])
+            desc_rect = desc_surface.get_rect(center=(center_x + 20, item_y))
+            self.screen.blit(desc_surface, desc_rect)
+        
+        # 显示当前选中文件的详细信息
+        if self.available_json_files:
+            selected_file = self.available_json_files[self.selected_json_index]
+            info_text = f"选中: {selected_file['path']}"
+            info_surface = self._render_mixed_text(info_text, 'small', Config.COLORS['INFO'])
+            info_rect = info_surface.get_rect(center=(center_x, controls_y + 100))
+            self.screen.blit(info_surface, info_rect)
     
     def add_message(self, message: str):
         """

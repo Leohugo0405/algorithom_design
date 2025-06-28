@@ -118,6 +118,80 @@ class GameEngine:
             'exit_pos': self.exit_pos
         }
     
+    def load_maze_from_json(self, json_file_path: str) -> Dict:
+        """
+        从JSON文件加载迷宫
+        
+        Args:
+            json_file_path: JSON文件路径
+        
+        Returns:
+            Dict: 加载结果
+        """
+        try:
+            with open(json_file_path, 'r', encoding='utf-8') as f:
+                maze_data = json.load(f)
+            
+            # 验证JSON格式
+            if 'maze' not in maze_data:
+                return {'success': False, 'message': 'JSON文件缺少maze字段'}
+            
+            maze = maze_data['maze']
+            if not isinstance(maze, list) or not all(isinstance(row, list) for row in maze):
+                return {'success': False, 'message': '迷宫格式不正确'}
+            
+            # 检查迷宫是否为方形
+            maze_size = len(maze)
+            if not all(len(row) == maze_size for row in maze):
+                return {'success': False, 'message': '迷宫必须为方形'}
+            
+            # 设置迷宫
+            self.maze = maze
+            self.maze_size = maze_size
+            
+            # 找到起点和终点
+            self._find_start_and_exit()
+            
+            if not self.start_pos:
+                return {'success': False, 'message': '迷宫中未找到起点(S)'}
+            if not self.exit_pos:
+                return {'success': False, 'message': '迷宫中未找到终点(E)'}
+            
+            # 初始化玩家位置
+            self.player_pos = self.start_pos
+            
+            # 初始化算法组件
+            self.path_planner = PathPlanner(self.maze)
+            self.greedy_strategy = GreedyStrategy(self.maze)
+            self.boss_strategy = BossStrategy()
+            self.resource_path_planner = ResourcePathPlanner(self.maze)
+            
+            # 重置游戏状态
+            self._reset_game_state()
+            
+            # 为每个boss位置分配固定的战斗场景
+            self._initialize_boss_configurations()
+            
+            # 如果JSON中包含最大资源数，则设置
+            if 'max_resource' in maze_data:
+                self.player_resources = 0  # 重置为0，让玩家重新收集
+            
+            return {
+                'success': True,
+                'maze_size': self.maze_size,
+                'start_pos': self.start_pos,
+                'exit_pos': self.exit_pos,
+                'loaded_from_file': json_file_path,
+                'has_optimal_path': 'optimal_path' in maze_data
+            }
+            
+        except FileNotFoundError:
+            return {'success': False, 'message': f'文件未找到: {json_file_path}'}
+        except json.JSONDecodeError as e:
+            return {'success': False, 'message': f'JSON格式错误: {str(e)}'}
+        except Exception as e:
+            return {'success': False, 'message': f'加载失败: {str(e)}'}
+    
     def _find_start_and_exit(self):
         """
         找到迷宫中的起点和终点
