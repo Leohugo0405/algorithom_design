@@ -421,7 +421,7 @@ class ResourcePathPlanner:
             'resource_value_priority': total_value  # 新增：资源价值优先指标
         }
     
-    def get_alternative_paths(self, num_alternatives: int = 3) -> List[Dict]:
+    def get_alternative_paths(self, num_alternatives: int = 2) -> List[Dict]:
         """
         获取多个备选路径方案
         
@@ -434,13 +434,13 @@ class ResourcePathPlanner:
         alternatives = []
         
         # 方案1：最优资源收集路径
-        optimal_result = self.find_optimal_resource_path()
-        if optimal_result['success']:
-            alternatives.append({
-                'name': '最优资源收集路径',
-                'description': '收集价值最高的资源组合',
-                **optimal_result
-            })
+        # optimal_result = self.find_optimal_resource_path()
+        # if optimal_result['success']:
+        #     alternatives.append({
+        #         'name': '最优资源收集路径',
+        #         'description': '收集价值最高的资源组合',
+        #         **optimal_result
+        #     })
         
         # 方案2：直接路径（不收集资源）
         direct_path = self._a_star_path(self.start_pos, self.exit_pos)

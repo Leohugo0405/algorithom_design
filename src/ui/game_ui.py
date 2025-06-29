@@ -71,6 +71,11 @@ class GameUI:
         self.visual_navigation_timer = 0
         self.visual_navigation_delay = 300  # 每步间隔毫秒数
         
+        # AI导航相关
+        self.ai_navigation_active = False
+        self.ai_navigation_timer = 0
+        self.ai_navigation_delay = 300  # 每步间隔毫秒数
+        
         # 初始化pygame
         self._initialize_pygame()
         
@@ -220,6 +225,7 @@ class GameUI:
             # 更新可视化导航
             if self.game_started and not self.paused:
                 self._update_visual_navigation()
+                self._update_ai_navigation()
             
             # 如果显示设置界面
             if self.show_settings:
@@ -349,13 +355,6 @@ class GameUI:
             if self.show_optimal_path:
                 self._calculate_optimal_path()
             self.add_message("最优路径显示" + ("开启" if self.show_optimal_path else "关闭"))
-        
-        elif key == pygame.K_g:
-            # 显示/隐藏贪心路径
-            self.show_greedy_path = not self.show_greedy_path
-            if self.show_greedy_path:
-                self._calculate_greedy_path()
-            self.add_message("贪心路径显示" + ("开启" if self.show_greedy_path else "关闭"))
         
         elif key == pygame.K_s:
             # 切换统计信息显示
@@ -1022,6 +1021,14 @@ class GameUI:
                 ("🚀", "可视化导航", nav_progress, Config.COLORS['PURPLE'])
             )
         
+        # 如果有AI导航，添加AI导航状态
+        ai_nav_status = self.game_engine.get_ai_navigation_status()
+        if ai_nav_status['active']:
+            ai_nav_progress = f"{ai_nav_status['current_step']}/{ai_nav_status['total_steps']}"
+            stats_data.append(
+                ("🤖", "AI最佳路径", ai_nav_progress, Config.COLORS['GOLD'])
+            )
+        
         # 绘制统计信息
         start_y = y + title_height + 10
         for i, (icon, label, value, color) in enumerate(stats_data):
@@ -1123,7 +1130,7 @@ class GameUI:
             int: 下一个面板的y坐标
         """
         # 面板背景 - 现代化设计
-        panel_height = 220
+        panel_height = 260
         panel_width = 320
         
         # 绘制阴影效果
@@ -1511,18 +1518,46 @@ class GameUI:
     
     def _execute_optimal_path_navigation(self):
         """
-        执行最优资源收集路径的自动导航（可视化版本）
+        执行最优路径自动导航（优先使用dp测试集中的optimal_path）
         """
         if not self.game_started or self.game_completed or self.paused:
             self.add_message("游戏未开始、已结束或已暂停")
             return
         
-        # 检查是否已有可视化导航在进行
+        # 检查是否已有导航在进行
         nav_status = self.game_engine.get_visual_navigation_status()
-        if nav_status['active']:
-            self.add_message("可视化导航已在进行中")
+        ai_nav_status = self.game_engine.get_ai_navigation_status()
+        if nav_status['active'] or ai_nav_status['active']:
+            self.add_message("导航已在进行中")
             return
         
+        # 优先尝试使用dp测试集中的optimal_path
+        if self.available_json_files and hasattr(self, 'selected_json_index'):
+            selected_file = self.available_json_files[self.selected_json_index]
+            file_path = selected_file['path']
+            
+            self.add_message(f"使用dp测试集最优路径: {selected_file['name']}")
+            
+            # 尝试使用AI最佳路径导航
+            result = self.game_engine.start_ai_optimal_path_navigation(file_path)
+            
+            if result['success']:
+                self.add_message(f"AI最佳路径导航开始: 共{result['total_steps']}步")
+                self.add_message(f"预期资源值: {result['max_resource']}")
+                
+                # 显示最优路径
+                if 'optimal_path' in result:
+                    self.optimal_path = result['optimal_path']
+                    self.show_optimal_path = True
+                
+                # 开始AI导航（自动执行）
+                self._start_ai_navigation_execution()
+                return
+            else:
+                self.add_message(f"dp测试集路径加载失败: {result['message']}")
+                self.add_message("回退到内部路径计算...")
+        
+        # 回退到原有的内部路径计算
         self.add_message("开始可视化最优路径自动导航...")
         result = self.game_engine.start_visual_optimal_path_navigation()
         
@@ -1583,9 +1618,52 @@ class GameUI:
         if self.visual_navigation_active:
             result = self.game_engine.stop_visual_navigation()
             self.visual_navigation_active = False
-            self.add_message(result['message'])
+            self.add_message("可视化导航已停止")
+        elif self.ai_navigation_active:
+            result = self.game_engine.stop_ai_navigation()
+            self.ai_navigation_active = False
+            self.add_message("AI导航已停止")
         else:
-            self.add_message("当前没有活跃的可视化导航")
+            self.add_message("当前没有活跃的导航")
+    
+    def _start_ai_navigation_execution(self):
+        """
+        开始AI导航的自动执行
+        """
+        self.ai_navigation_active = True
+        self.ai_navigation_timer = 0
+        self.ai_navigation_delay = 300  # 每步间隔300毫秒
+    
+    def _update_ai_navigation(self):
+        """
+        更新AI导航状态
+        """
+        if not self.ai_navigation_active:
+            return
+        
+        # 计算时间差
+        dt = self.clock.get_time()
+        self.ai_navigation_timer += dt
+        
+        # 检查是否到了执行下一步的时间
+        if self.ai_navigation_timer >= self.ai_navigation_delay:
+            self.ai_navigation_timer = 0
+            
+            # 执行AI导航的下一步
+            result = self.game_engine.execute_ai_navigation_step()
+            
+            if result['success']:
+                if result['completed']:
+                    # 导航完成
+                    self.ai_navigation_active = False
+                    self.add_message("AI最佳路径导航完成！")
+                else:
+                    # 继续导航
+                    self.add_message(f"AI导航步骤 {result['current_step']}/{result['total_steps']}: {result['message']}")
+            else:
+                # 导航失败
+                self.ai_navigation_active = False
+                self.add_message(f"AI导航失败: {result['message']}")
     
     def _auto_navigate_to_exit(self):
         """
@@ -1655,9 +1733,9 @@ class GameUI:
         
         # 扫描样例目录中的JSON文件
         sample_dirs = [
-            "样例/迷宫动态规划样例",
-            "样例/BOSS战样例",
-            "样例/回溯法解密样例"
+            "dp测试集/easy",
+            "dp测试集/hard",
+            "dp测试集/medium"
         ]
         
         for sample_dir in sample_dirs:

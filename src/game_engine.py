@@ -1661,3 +1661,295 @@ class GameEngine:
             'optimal_path': nav.get('optimal_path', []),
             'resources_in_path': nav.get('resources_in_path', 0)
         }
+    
+    def load_optimal_path_from_file(self, file_path: str) -> Dict:
+        """
+        从dp测试集文件中加载最优路径
+        
+        Args:
+            file_path: JSON文件路径
+        
+        Returns:
+            Dict: 加载结果
+        """
+        try:
+            import json
+            import os
+            
+            if not os.path.exists(file_path):
+                return {
+                    'success': False,
+                    'message': f'文件不存在: {file_path}'
+                }
+            
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            if 'optimal_path' not in data:
+                return {
+                    'success': False,
+                    'message': '文件中没有optimal_path字段'
+                }
+            
+            optimal_path = data['optimal_path']
+            if not isinstance(optimal_path, list):
+                return {
+                    'success': False,
+                    'message': 'optimal_path必须是列表格式'
+                }
+            
+            # 验证路径格式
+            for i, point in enumerate(optimal_path):
+                if not isinstance(point, list) or len(point) != 2:
+                    return {
+                        'success': False,
+                        'message': f'路径点{i}格式错误，应为[行,列]格式'
+                    }
+            
+            return {
+                'success': True,
+                'optimal_path': optimal_path,
+                'max_resource': data.get('max_resource', 0),
+                'maze': data.get('maze', []),
+                'message': f'成功加载{len(optimal_path)}个路径点'
+            }
+            
+        except json.JSONDecodeError as e:
+            return {
+                'success': False,
+                'message': f'JSON解析错误: {str(e)}'
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'message': f'加载文件时发生错误: {str(e)}'
+            }
+    
+    def start_ai_optimal_path_navigation(self, file_path: str) -> Dict:
+        """
+        开始AI最佳路径自动巡航
+        
+        Args:
+            file_path: dp测试集JSON文件路径
+        
+        Returns:
+            Dict: 初始化结果
+        """
+        # 加载最优路径
+        load_result = self.load_optimal_path_from_file(file_path)
+        if not load_result['success']:
+            return load_result
+        
+        optimal_path = load_result['optimal_path']
+        
+        # 转换路径格式为移动步骤
+        navigation_steps = self._convert_path_to_steps(optimal_path)
+        
+        if not navigation_steps:
+            return {
+                'success': False,
+                'message': '无法生成导航步骤'
+            }
+        
+        # 初始化AI导航状态
+        self.ai_navigation = {
+            'active': True,
+            'steps': navigation_steps,
+            'current_step': 0,
+            'optimal_path': optimal_path,
+            'max_resource': load_result.get('max_resource', 0),
+            'file_path': file_path
+        }
+        
+        return {
+            'success': True,
+            'total_steps': len(navigation_steps),
+            'optimal_path': optimal_path,
+            'max_resource': load_result.get('max_resource', 0),
+            'message': f'开始AI最佳路径导航，共{len(navigation_steps)}步，预期资源值{load_result.get("max_resource", 0)}'
+        }
+    
+    def _convert_path_to_steps(self, optimal_path: List[List[int]]) -> List[str]:
+        """
+        将路径坐标列表转换为移动步骤
+        
+        Args:
+            optimal_path: 路径坐标列表，格式为[[行,列], ...]
+        
+        Returns:
+            List[str]: 移动步骤列表
+        """
+        if len(optimal_path) < 2:
+            return []
+        
+        steps = []
+        for i in range(1, len(optimal_path)):
+            current_pos = optimal_path[i-1]
+            next_pos = optimal_path[i]
+            
+            # 计算移动方向
+            row_diff = next_pos[0] - current_pos[0]
+            col_diff = next_pos[1] - current_pos[1]
+            
+            # 转换为移动指令
+            if row_diff == -1 and col_diff == 0:
+                steps.append('up')
+            elif row_diff == 1 and col_diff == 0:
+                steps.append('down')
+            elif row_diff == 0 and col_diff == -1:
+                steps.append('left')
+            elif row_diff == 0 and col_diff == 1:
+                steps.append('right')
+            else:
+                # 非相邻移动，可能是传送或特殊移动
+                print(f"警告: 检测到非相邻移动 {current_pos} -> {next_pos}")
+                continue
+        
+        return steps
+    
+    def execute_ai_navigation_step(self) -> Dict:
+        """
+        执行AI导航的下一步
+        
+        Returns:
+            Dict: 执行结果
+        """
+        if not hasattr(self, 'ai_navigation') or not self.ai_navigation.get('active'):
+            return {
+                'success': False,
+                'message': 'AI导航未激活',
+                'completed': True
+            }
+        
+        steps = self.ai_navigation['steps']
+        current_step = self.ai_navigation['current_step']
+        
+        if current_step >= len(steps):
+            # 导航完成
+            self.ai_navigation['active'] = False
+            return {
+                'success': True,
+                'message': 'AI最佳路径导航完成',
+                'completed': True,
+                'current_step': current_step,
+                'total_steps': len(steps),
+                'optimal_path': self.ai_navigation.get('optimal_path', []),
+                'max_resource': self.ai_navigation.get('max_resource', 0)
+            }
+        
+        # 执行当前步骤
+        step = steps[current_step]
+        result = self.move_player(step)
+        
+        if result['success']:
+            self.ai_navigation['current_step'] += 1
+            
+            return {
+                'success': True,
+                'message': f'执行AI导航步骤 {current_step + 1}/{len(steps)}: {step}',
+                'completed': False,
+                'current_step': current_step + 1,
+                'total_steps': len(steps),
+                'move_result': result,
+                'optimal_path': self.ai_navigation.get('optimal_path', []),
+                'max_resource': self.ai_navigation.get('max_resource', 0)
+            }
+        else:
+            # 移动失败，停止导航
+            self.ai_navigation['active'] = False
+            return {
+                'success': False,
+                'message': f'AI导航在第{current_step + 1}步失败: {result.get("message", "未知错误")}',
+                'completed': True,
+                'current_step': current_step,
+                'total_steps': len(steps)
+            }
+    
+    def stop_ai_navigation(self) -> Dict:
+        """
+        停止AI导航
+        
+        Returns:
+            Dict: 停止结果
+        """
+        if hasattr(self, 'ai_navigation'):
+            self.ai_navigation['active'] = False
+            return {
+                'success': True,
+                'message': 'AI导航已停止'
+            }
+        else:
+            return {
+                'success': False,
+                'message': '没有活跃的AI导航'
+            }
+    
+    def get_ai_navigation_status(self) -> Dict:
+        """
+        获取AI导航状态
+        
+        Returns:
+            Dict: 导航状态
+        """
+        if not hasattr(self, 'ai_navigation'):
+            return {
+                'active': False,
+                'current_step': 0,
+                'total_steps': 0,
+                'optimal_path': [],
+                'max_resource': 0
+            }
+        
+        nav = self.ai_navigation
+        return {
+            'active': nav.get('active', False),
+            'current_step': nav.get('current_step', 0),
+            'total_steps': len(nav.get('steps', [])),
+            'optimal_path': nav.get('optimal_path', []),
+            'max_resource': nav.get('max_resource', 0),
+            'file_path': nav.get('file_path', '')
+        }
+    
+    def execute_full_ai_navigation(self, file_path: str) -> Dict:
+        """
+        执行完整的AI最佳路径导航
+        
+        Args:
+            file_path: dp测试集JSON文件路径
+        
+        Returns:
+            Dict: 执行结果
+        """
+        # 开始导航
+        start_result = self.start_ai_optimal_path_navigation(file_path)
+        if not start_result['success']:
+            return start_result
+        
+        executed_steps = 0
+        total_steps = start_result['total_steps']
+        
+        # 执行所有步骤
+        while True:
+            step_result = self.execute_ai_navigation_step()
+            
+            if step_result['completed']:
+                break
+            
+            if not step_result['success']:
+                return {
+                    'success': False,
+                    'executed_steps': executed_steps,
+                    'total_steps': total_steps,
+                    'message': step_result['message']
+                }
+            
+            executed_steps += 1
+        
+        return {
+            'success': True,
+            'executed_steps': executed_steps,
+            'total_steps': total_steps,
+            'optimal_path': start_result['optimal_path'],
+            'max_resource': start_result['max_resource'],
+            'message': f'AI最佳路径导航完成，执行了{executed_steps}步'
+        }
