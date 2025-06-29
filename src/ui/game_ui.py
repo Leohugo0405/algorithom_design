@@ -384,7 +384,10 @@ class GameUI:
             if not self.paused and not self.game_completed:
                 self._stop_visual_navigation()
         
-
+        elif key == pygame.K_i:
+            # 执行智能陷阱权衡路径导航
+            if not self.paused and not self.game_completed:
+                self._execute_smart_trap_navigation()
         
         elif key == pygame.K_p:
             # 显示资源路径规划
@@ -1160,6 +1163,7 @@ class GameUI:
             ("⚡", "交互", "Enter", Config.COLORS['WARNING']),
             ("🤖", "自动拾取", "A", Config.COLORS['SUCCESS']),
             ("🚀", "最优路径导航", "X", Config.COLORS['PURPLE']),
+            ("🧠", "智能陷阱权衡", "I", Config.COLORS['GOLD']),
             ("⏹️", "停止可视化导航", "Z", Config.COLORS['DANGER']),
             ("🗺️", "路径方案", "M", Config.COLORS['PURPLE']),
             ("👁️", "切换显示", "V", Config.COLORS['BLUE']),
@@ -1531,18 +1535,15 @@ class GameUI:
             self.add_message("导航已在进行中")
             return
         
-        # 优先尝试使用dp测试集中的optimal_path
-        if self.available_json_files and hasattr(self, 'selected_json_index'):
-            selected_file = self.available_json_files[self.selected_json_index]
-            file_path = selected_file['path']
+        # 根据迷宫来源选择不同的路径算法
+        if self.game_engine.maze_loaded_from_json and self.game_engine.json_optimal_path:
+
+            self.add_message("使用最优路径")
             
-            self.add_message(f"使用dp测试集最优路径: {selected_file['name']}")
-            
-            # 尝试使用AI最佳路径导航
-            result = self.game_engine.start_ai_optimal_path_navigation(file_path)
+            result = self.game_engine.start_json_optimal_path_navigation()
             
             if result['success']:
-                self.add_message(f"AI最佳路径导航开始: 共{result['total_steps']}步")
+                self.add_message(f"JSON最优路径导航开始: 共{result['total_steps']}步")
                 self.add_message(f"预期资源值: {result['max_resource']}")
                 
                 # 显示最优路径
@@ -1554,11 +1555,17 @@ class GameUI:
                 self._start_ai_navigation_execution()
                 return
             else:
-                self.add_message(f"dp测试集路径加载失败: {result['message']}")
-                self.add_message("回退到内部路径计算...")
+                self.add_message(f"JSON路径导航失败: {result['message']}")
+                self.add_message("回退到ResourcePathPlanner算法...")
+        else:
+            # 迷宫是随机生成的或JSON文件无optimal_path，使用ResourcePathPlanner算法
+            if self.game_engine.maze_loaded_from_json:
+                self.add_message("使用ResourcePathPlanner算法")
+            else:
+                self.add_message("随机生成迷宫，使用ResourcePathPlanner算法")
         
-        # 回退到原有的内部路径计算
-        self.add_message("开始可视化最优路径自动导航...")
+        # 使用ResourcePathPlanner算法进行路径计算
+        self.add_message("开始ResourcePathPlanner最优路径导航...")
         result = self.game_engine.start_visual_optimal_path_navigation()
         
         if result['success']:
@@ -1610,6 +1617,44 @@ class GameUI:
                 # 导航失败
                 self.visual_navigation_active = False
                 self.add_message(f"可视化导航失败: {result['message']}")
+    
+    def _execute_smart_trap_navigation(self):
+        """
+        执行智能陷阱权衡路径导航
+        """
+        if not self.game_started or self.game_completed or self.paused:
+            self.add_message("游戏未开始、已结束或已暂停")
+            return
+        
+        # 检查是否已有导航在进行
+        nav_status = self.game_engine.get_visual_navigation_status()
+        ai_nav_status = self.game_engine.get_ai_navigation_status()
+        if nav_status['active'] or ai_nav_status['active']:
+            self.add_message("导航已在进行中")
+            return
+        
+        self.add_message("开始智能陷阱权衡路径计算...")
+        result = self.game_engine.get_smart_optimal_path_with_traps()
+        
+        if result['success']:
+            self.add_message(f"智能路径计算完成: 共{result['total_steps']}步")
+            self.add_message(f"净价值: {result['net_value']} (考虑陷阱代价)")
+            self.add_message(f"资源数量: {result['resources_count']}")
+            
+            # 显示智能路径
+            if 'path' in result:
+                self.optimal_path = result['path']
+                self.show_optimal_path = True
+            
+            # 开始可视化导航
+            self.visual_navigation_active = True
+            self.visual_navigation_timer = 0
+            self.visual_navigation_delay = 300  # 每步间隔300毫秒
+            
+            # 设置导航路径
+            self.game_engine.set_visual_navigation_path(result['path'])
+        else:
+            self.add_message(f"智能路径计算失败: {result['message']}")
     
     def _stop_visual_navigation(self):
         """

@@ -49,6 +49,11 @@ class GameEngine:
         self.solved_puzzles = set()
         self.defeated_bosses = set()
         
+        # 迷宫来源标记
+        self.maze_loaded_from_json = False
+        self.current_json_file_path = None
+        self.json_optimal_path = None
+        
         # 游戏统计
         self.moves_count = 0
         self.puzzles_attempted = 0
@@ -106,6 +111,11 @@ class GameEngine:
         
         # 重置游戏状态
         self._reset_game_state()
+        
+        # 重置迷宫来源标记（随机生成的迷宫）
+        self.maze_loaded_from_json = False
+        self.current_json_file_path = None
+        self.json_optimal_path = None
         
         # 为每个boss位置分配固定的战斗场景
         self._initialize_boss_configurations()
@@ -175,6 +185,11 @@ class GameEngine:
             # 如果JSON中包含最大资源数，则设置
             if 'max_resource' in maze_data:
                 self.player_resources = 0  # 重置为0，让玩家重新收集
+            
+            # 设置迷宫来源标记
+            self.maze_loaded_from_json = True
+            self.current_json_file_path = json_file_path
+            self.json_optimal_path = maze_data.get('optimal_path', None)
             
             return {
                 'success': True,
@@ -773,11 +788,32 @@ class GameEngine:
     
     def get_optimal_path(self) -> Dict:
         """
-        获取动态规划最优路径
+        获取智能最优路径（优先使用陷阱权衡算法）
         
         Returns:
             Dict: 最优路径信息
         """
+        # 首先尝试使用智能陷阱权衡算法
+        smart_result = self.get_smart_optimal_path_with_traps()
+        
+        if smart_result['success'] and smart_result.get('net_value', smart_result.get('total_value', 0)) > 0:
+            return {
+                'success': True,
+                'max_value': smart_result.get('net_value', smart_result.get('total_value', 0)),
+                'optimal_path': smart_result['path'],
+                'path_details': {
+                    'length': smart_result['total_steps'],
+                    'total_value': smart_result['total_value'],
+                    'net_value': smart_result.get('net_value', smart_result['total_value']),
+                    'resources_collected': len(smart_result.get('resources_collected', [])),
+                    'strategy': smart_result.get('strategy', 'smart_optimal'),
+                    'traps_crossed': smart_result.get('traps_crossed', 0),
+                    'coins_collected': smart_result.get('coins_collected', 0)
+                },
+                'algorithm': 'smart_trap_consideration'
+            }
+        
+        # 回退到传统动态规划算法
         if not self.path_planner:
             return {'success': False, 'message': '路径规划器未初始化'}
         
@@ -788,7 +824,8 @@ class GameEngine:
             'success': True,
             'max_value': max_value,
             'optimal_path': optimal_path,
-            'path_details': path_details
+            'path_details': path_details,
+            'algorithm': 'traditional_dp'
         }
     
     def get_greedy_path(self) -> Dict:
@@ -1339,10 +1376,60 @@ class GameEngine:
             'success': True,
             'path': path,
             'steps': steps,
-            'target_resource': nearest_resource,
+            'target_resource': highest_value_resource,
             'total_steps': len(steps),
-            'message': f'找到最近资源路径，共需{len(steps)}步'
+            'message': f'找到最高价值资源路径，共需{len(steps)}步'
         }
+    
+    def get_smart_optimal_path_with_traps(self) -> Dict:
+        """
+        获取智能最优路径（考虑陷阱权衡）
+        使用resource_path_planner的陷阱权衡算法
+        
+        Returns:
+            Dict: 智能路径结果
+        """
+        if not self.resource_path_planner:
+            return {
+                'success': False,
+                'message': '资源路径规划器未初始化',
+                'steps': []
+            }
+        
+        # 临时设置起点为当前玩家位置
+        original_start = self.resource_path_planner.start_pos
+        self.resource_path_planner.start_pos = self.player_pos
+        
+        try:
+            # 使用陷阱权衡算法找到最优路径
+            result = self.resource_path_planner.find_maximum_value_path_with_traps()
+            
+            if result['success']:
+                steps = self.resource_path_planner.get_auto_navigation_steps(
+                    result['path'], self.player_pos)
+                
+                return {
+                    'success': True,
+                    'path': result['path'],
+                    'steps': steps,
+                    'total_value': result['total_value'],
+                    'net_value': result.get('net_value', result['total_value']),
+                    'resources_collected': result.get('resources_collected', []),
+                    'strategy': result.get('strategy', 'smart_trap_consideration'),
+                    'traps_crossed': result.get('traps_crossed', 0),
+                    'coins_collected': result.get('coins_collected', 0),
+                    'total_steps': len(steps),
+                    'message': f'找到智能最优路径，净价值{result.get("net_value", result["total_value"])}，共需{len(steps)}步'
+                }
+            else:
+                return {
+                    'success': False,
+                    'message': result.get('message', '无法找到智能路径'),
+                    'steps': []
+                }
+        finally:
+            # 恢复原始起点
+            self.resource_path_planner.start_pos = original_start
     
     def get_resource_path_alternatives(self, num_alternatives: int = 3) -> List[Dict]:
         """
@@ -1724,6 +1811,54 @@ class GameEngine:
                 'success': False,
                 'message': f'加载文件时发生错误: {str(e)}'
             }
+    
+    def start_json_optimal_path_navigation(self) -> Dict:
+        """
+        使用当前加载的JSON文件中的optimal_path进行导航
+        
+        Returns:
+            Dict: 导航结果
+        """
+        if not self.maze_loaded_from_json:
+            return {'success': False, 'message': '当前迷宫不是从JSON文件加载的'}
+            
+        if not self.json_optimal_path:
+            return {'success': False, 'message': 'JSON文件中没有optimal_path字段'}
+        
+        # 转换路径格式为移动步骤
+        navigation_steps = self._convert_path_to_steps(self.json_optimal_path)
+        
+        if not navigation_steps:
+            return {
+                'success': False,
+                'message': '无法生成导航步骤'
+            }
+        
+        # 计算路径中的资源总值
+        max_resource = 0
+        for pos in self.json_optimal_path:
+            if len(pos) >= 2:
+                x, y = pos[0], pos[1]
+                if 0 <= x < self.maze_size and 0 <= y < self.maze_size:
+                    if self.maze[x][y] == Config.GOLD:
+                        max_resource += 1  # 简单计算资源数量
+        
+        # 初始化AI导航状态
+        self.ai_navigation = {
+            'active': True,
+            'steps': navigation_steps,
+            'current_step': 0,
+            'optimal_path': self.json_optimal_path,
+            'max_resource': max_resource,
+            'file_path': self.current_json_file_path
+        }
+        
+        return {
+            'success': True, 
+            'total_steps': len(navigation_steps),
+            'max_resource': max_resource,
+            'optimal_path': self.json_optimal_path
+        }
     
     def start_ai_optimal_path_navigation(self, file_path: str) -> Dict:
         """
