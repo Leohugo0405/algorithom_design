@@ -520,18 +520,7 @@ class GameUI:
             self.add_message(f"最优路径计算完成，步数: {len(result['optimal_path'])}")
         else:
             self.add_message("最优路径计算失败")
-    
-    def _calculate_greedy_path(self):
-        """
-        计算并缓存贪心路径
-        """
-        result = self.game_engine.get_greedy_path()
-        if result['success']:
-            self.greedy_path = result['greedy_path']
-            self.add_message(f"贪心路径计算完成")
-        else:
-            self.add_message("贪心路径计算失败")
-    
+
 
     
     def _handle_lock_encounter(self, interaction: Dict):
@@ -1488,7 +1477,7 @@ class GameUI:
         if result['success']:
             self.add_message(f"最优资源路径计算完成")
             self.add_message(f"路径长度: {len(result['path'])}步")
-            self.add_message(f"收集资源: {len(result['resources_collected'])}个")
+            self.add_message(f"总价值: {result.get('total_value', 0)}")
             
             # 保存路径用于显示
             self.optimal_path = result['path']
@@ -1522,7 +1511,7 @@ class GameUI:
     
     def _execute_optimal_path_navigation(self):
         """
-        执行最优路径自动导航（优先使用dp测试集中的optimal_path）
+        执行最优路径自动导航
         """
         if not self.game_started or self.game_completed or self.paused:
             self.add_message("游戏未开始、已结束或已暂停")

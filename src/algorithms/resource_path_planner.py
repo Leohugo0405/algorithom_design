@@ -438,9 +438,9 @@ class ResourcePathPlanner:
         # 依次访问每个资源
         for resource in resource_order:
             target_pos = resource['position']
-            segment_path = self._a_star_path(current_pos, target_pos)
+            segment_path_str = self._a_star_path(current_pos, target_pos)
 
-            if not segment_path:
+            if not segment_path_str:
                 return {
                     'success': False,
                     'message': f'无法到达资源位置 {target_pos}',
@@ -448,6 +448,9 @@ class ResourcePathPlanner:
                     'total_value': 0
                 }
 
+            # 将字符串路径转换为坐标列表
+            segment_path = self._convert_string_path_to_coordinates(segment_path_str, current_pos)
+            
             # 添加路径段（避免重复起点）
             if full_path:
                 full_path.extend(segment_path[1:])
@@ -458,8 +461,8 @@ class ResourcePathPlanner:
             collected_resources.append(resource)
 
         # 从最后一个资源到终点
-        final_segment = self._a_star_path(current_pos, self.exit_pos)
-        if not final_segment:
+        final_segment_str = self._a_star_path(current_pos, self.exit_pos)
+        if not final_segment_str:
             return {
                 'success': False,
                 'message': '无法从最后资源到达终点',
@@ -467,6 +470,8 @@ class ResourcePathPlanner:
                 'total_value': 0
             }
 
+        # 将字符串路径转换为坐标列表
+        final_segment = self._convert_string_path_to_coordinates(final_segment_str, current_pos)
         full_path.extend(final_segment[1:])
         total_value = self._calculate_path_value(full_path)
 
@@ -927,24 +932,27 @@ class ResourcePathPlanner:
         """
         alternatives = []
 
-        # 方案1：陷阱权衡最优路径
+        # 方案1：陷阱权衡最优路径 - 使用ResourcePathPlanner的核心算法
         trap_result = self.find_maximum_value_path_with_traps()
         if trap_result['success']:
             alternatives.append({
-                'name': '陷阱权衡最优路径',
+                'name': '🧠 智能陷阱权衡路径',
                 'description': '权衡陷阱代价与金币收益的最优策略',
                 **trap_result
             })
+            print(f"陷阱权衡最优路径: 净价值={trap_result.get('net_value', 0)}, 总价值={trap_result.get('total_value', 0)}")
 
         # 方案2：直接路径
         direct_path = self._a_star_path(self.start_pos, self.exit_pos)
         if direct_path:
+            # 将字符串路径转换为坐标路径
+            coord_path = self._convert_string_path_to_coordinates(direct_path)
             alternatives.append({
-                'name': '直接路径',
+                'name': '🚀 直接最短路径',
                 'description': '最短路径，不收集任何资源',
                 'success': True,
-                'path': direct_path,
-                'total_value': self._calculate_path_value(direct_path),
+                'path': coord_path,
+                'total_value': self._calculate_path_value(coord_path),
                 'resources_collected': [],
                 'strategy': 'direct_path'
             })
@@ -955,7 +963,7 @@ class ResourcePathPlanner:
             safe_result = self._find_path_through_resources(positive_resources)
             if safe_result['success']:
                 alternatives.append({
-                    'name': '安全收集路径',
+                    'name': '💰 安全收集路径',
                     'description': '只收集正价值资源，避开所有陷阱',
                     **safe_result
                 })
@@ -964,3 +972,39 @@ class ResourcePathPlanner:
         alternatives.sort(key=lambda x: x.get('net_value', x.get('total_value', 0)), reverse=True)
 
         return alternatives[:num_alternatives]
+    
+    def _convert_string_path_to_coordinates(self, path_string: str, start_pos: Tuple[int, int] = None) -> List[Tuple[int, int]]:
+        """
+        将字符串路径转换为坐标路径
+        
+        Args:
+            path_string: 由'R'、'L'、'D'、'U'组成的移动序列
+            start_pos: 起始位置，如果未提供则使用self.start_pos
+        
+        Returns:
+            List[Tuple[int, int]]: 坐标路径
+        """
+        if start_pos is None:
+            start_pos = self.start_pos
+            
+        if not path_string:
+            return [start_pos] if start_pos else []
+        
+        coord_path = [start_pos]
+        current_pos = start_pos
+        
+        # 方向映射
+        direction_map = {
+            'R': (0, 1),   # 右
+            'L': (0, -1),  # 左
+            'D': (1, 0),   # 下
+            'U': (-1, 0)   # 上
+        }
+        
+        for move in path_string:
+            if move in direction_map:
+                dx, dy = direction_map[move]
+                current_pos = (current_pos[0] + dx, current_pos[1] + dy)
+                coord_path.append(current_pos)
+        
+        return coord_path
