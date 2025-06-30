@@ -964,7 +964,7 @@ class GameUI:
         game_state = self.game_engine.get_game_state()
         
         # 面板背景 - 现代化设计
-        panel_height = 200
+        panel_height = 230
         panel_width = 320
         
         # 绘制阴影效果
@@ -1445,7 +1445,7 @@ class GameUI:
         # 游戏说明内容
         descriptions = [
             ("🏁", "从起点(S)到达终点(E)", Config.COLORS['SUCCESS']),
-            ("💎", "收集资源(G), 避开陷阱(T)", Config.COLORS['GOLD']),
+            ("💰", "收集资源(G), 避开陷阱(T)", Config.COLORS['GOLD']),
             ("🔐", "解开机关(L), 击败BOSS(B)", Config.COLORS['PURPLE'])
         ]
         
