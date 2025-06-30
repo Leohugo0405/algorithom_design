@@ -5,10 +5,127 @@
 定义游戏的基本参数和常量
 """
 
+import json
+import os
+
 class Config:
     """
     游戏配置类
     """
+    
+    @classmethod
+    def load_from_json(cls, json_file_path):
+        """
+        从JSON文件加载配置并更新SKILLS和MONSTER_TYPES
+        
+        Args:
+            json_file_path (str): JSON配置文件路径
+            
+        JSON格式示例:
+        {
+            "B": [11, 13, 8, 17],  # boss血量列表
+            "PlayerSkills": [[6, 2], [2, 0], [4, 1]],  # 技能配置 [伤害, 冷却]
+            "min_turns": 13,
+            "actions": [0, 2, 1, 2, 0, 2, 1, 0, 1, 2, 0, 1, 2]
+        }
+        """
+        if not os.path.exists(json_file_path):
+            print(f"配置文件不存在: {json_file_path}")
+            return False
+            
+        try:
+            with open(json_file_path, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+            
+            # 更新BOSS血量
+            if 'B' in config_data and config_data['B']:
+                boss_hp_list = config_data['B']
+                # 更新默认BOSS血量为第一个值
+                cls.BOSS_HP = boss_hp_list[0]
+                
+                # 如果有多个BOSS血量，可以扩展MONSTER_TYPES
+                if len(boss_hp_list) > 1:
+                    # 为不同难度的BOSS创建配置
+                    boss_configs ={}
+                    for i, hp in enumerate(boss_hp_list):
+                        boss_configs[f'boss_{i}'] = {'name': f'第{i+1}个BOSS', 'hp': hp}
+    
+                    cls.MONSTER_TYPES.update(boss_configs)
+            
+            # 更新玩家技能
+            if 'PlayerSkills' in config_data and config_data['PlayerSkills']:
+                player_skills = config_data['PlayerSkills']
+                
+                # 重新构建SKILLS字典
+                new_skills = {}
+                
+                for i, skill in enumerate(player_skills):
+                    new_skills[f'skill_{i}'] = {
+                        'name': str(i),
+                        'damage': skill[0],
+                        'cost': 0,
+                        'cooldown': skill[1] if len(skill) > 1 else 0
+                    }
+                # 更新技能配置
+                cls.SKILLS = new_skills
+            
+            # 存储额外的配置信息
+            if 'min_turns' in config_data:
+                cls.MIN_TURNS = config_data['min_turns']
+            
+            if 'actions' in config_data:
+                cls.ACTIONS_SEQUENCE = config_data['actions']
+            
+            print(f"成功从 {json_file_path} 加载配置")
+            print(f"BOSS血量: {cls.BOSS_HP}")
+            print(f"技能配置: {cls.SKILLS}")
+            return True
+            
+        except json.JSONDecodeError as e:
+            print(f"JSON文件格式错误: {e}")
+            return False
+        except Exception as e:
+            print(f"加载配置文件时出错: {e}")
+            return False
+    
+    @classmethod
+    def save_to_json(cls, json_file_path):
+        """
+        将当前配置保存到JSON文件
+        
+        Args:
+            json_file_path (str): 保存路径
+        """
+        try:
+            # 提取BOSS血量
+            boss_hp_list = [cls.BOSS_HP]
+            
+            # 从MONSTER_TYPES中提取BOSS血量
+            for monster_type, config in cls.MONSTER_TYPES.items():
+                if 'boss' in monster_type.lower():
+                    boss_hp_list.append(config['hp'])
+            
+            # 提取技能配置
+            player_skills = []
+            for skill_name, skill_config in cls.SKILLS.items():
+                player_skills.append([skill_config['damage'], skill_config['cooldown']])
+            
+            config_data = {
+                'B': boss_hp_list[:4],  # 最多保存4个BOSS血量
+                'PlayerSkills': player_skills,
+                'min_turns': getattr(cls, 'MIN_TURNS', 13),
+                'actions': getattr(cls, 'ACTIONS_SEQUENCE', [])
+            }
+            
+            with open(json_file_path, 'w', encoding='utf-8') as f:
+                json.dump(config_data, f, ensure_ascii=False, indent=2)
+            
+            print(f"配置已保存到 {json_file_path}")
+            return True
+            
+        except Exception as e:
+            print(f"保存配置文件时出错: {e}")
+            return False
     
     # 窗口设置
     WINDOW_WIDTH = 1200
@@ -120,13 +237,13 @@ class Config:
     # 玩家技能参数（移除血量相关技能）
     SKILLS = {
         'normal_attack': {
-            'name': '普通攻击',
+            'name': '0',
             'damage': 5,
             'cost': 0,
             'cooldown': 0
         },
         'special_attack': {
-            'name': '大招',
+            'name': '1',
             'damage': 10,
             'cost': 0, 
             'cooldown': 2  # 冷却2个回合

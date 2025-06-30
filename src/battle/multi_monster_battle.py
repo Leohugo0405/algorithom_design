@@ -109,8 +109,6 @@ class MultiMonsterBattle:
         for skill_name, skill_info in Config.SKILLS.items():
             can_use = True
             
-            # 移除资源检查，技能不消耗资源
-            
             # 检查冷却
             if self.skill_cooldowns.get(skill_name, 0) > 0:
                 can_use = False

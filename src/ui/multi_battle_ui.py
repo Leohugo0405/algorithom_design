@@ -8,10 +8,20 @@
 import pygame
 import math
 from typing import Dict, List, Tuple, Optional
-from ..config import Config
-from ..battle.multi_monster_battle import MultiMonsterBattle
-from ..algorithms.boss_strategy import BossStrategy
-from ..algorithms.multi_target_boss_strategy import MultiTargetBossStrategy
+try:
+    from ..config import Config
+    from ..battle.multi_monster_battle import MultiMonsterBattle
+    from ..algorithms.boss_strategy import BossStrategy
+    from ..algorithms.multi_target_boss_strategy import MultiTargetBossStrategy
+except ImportError:
+    # 当作为独立模块运行时的导入方式
+    import sys
+    import os
+    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+    from config import Config
+    from battle.multi_monster_battle import MultiMonsterBattle
+    from algorithms.boss_strategy import BossStrategy
+    from algorithms.multi_target_boss_strategy import MultiTargetBossStrategy
 
 class MultiMonsterBattleUI:
     """
@@ -58,6 +68,11 @@ class MultiMonsterBattleUI:
         self.scroll_offset = 0
         self.max_scroll_offset = 0
         
+        # 配置加载相关
+        self.show_config_dialog = False
+        self.config_files = []
+        self.selected_config_file = None
+        
         # UI布局
         self.player_area = pygame.Rect(50, 500, 300, 150)
         self.monsters_area = pygame.Rect(400, 100, 350, 400)
@@ -71,6 +86,7 @@ class MultiMonsterBattleUI:
         self.confirm_button = pygame.Rect(600, 670, 100, 30)
         self.cancel_button = pygame.Rect(720, 670, 100, 30)
         self.strategy_button = pygame.Rect(50, 680, 150, 30)  # 策略优化按钮
+        self.load_config_button = pygame.Rect(0, 0, 280, 32)
         
         self._initialize_pygame()
     
@@ -283,6 +299,10 @@ class MultiMonsterBattleUI:
             # 检查策略优化按钮
             if self.strategy_button.collidepoint(pos):
                 self._show_strategy_optimization()
+            
+            # 检查配置加载按钮
+            if self.load_config_button.collidepoint(pos):
+                self._show_config_selection()
     
     def _execute_skill(self, skill_name: str, target_id: Optional[int] = None):
         """执行技能"""
@@ -341,6 +361,76 @@ class MultiMonsterBattleUI:
     
     def _close_strategy_result(self):
         """关闭策略结果显示"""
+        self.show_strategy_result = False
+        self.optimal_strategy = None
+        self.strategy_stats = None
+        self.monster_targets = {}
+        self.scroll_offset = 0
+        self.max_scroll_offset = 0
+    
+    def _show_config_selection(self):
+        """显示配置文件选择对话框"""
+        import os
+        import tkinter as tk
+        from tkinter import filedialog, messagebox
+        
+        # 创建临时的tkinter窗口用于文件选择
+        root = tk.Tk()
+        root.withdraw()  # 隐藏主窗口
+        
+        # 设置文件选择对话框
+        file_path = filedialog.askopenfilename(
+            title="选择JSON配置文件",
+            filetypes=[("JSON文件", "*.json"), ("所有文件", "*.*")],
+            initialdir=os.path.dirname(os.path.abspath(__file__))
+        )
+        
+        if file_path:
+            self._load_config_file(file_path)
+        
+        root.destroy()
+    
+    def _load_config_file(self, file_path: str):
+        """加载JSON配置文件"""
+        try:
+            # 使用Config类的load_from_json方法
+            Config.load_from_json(file_path)
+            
+            # 重新初始化战斗系统以应用新配置
+            self._reinitialize_battle()
+            
+            # 显示成功消息
+            import tkinter as tk
+            from tkinter import messagebox
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showinfo("配置加载成功", f"已成功加载配置文件：\n{file_path}\n\n新的BOSS血量：{Config.BOSS_HP}\n技能数量：{len(Config.SKILLS)}")
+            root.destroy()
+            
+        except Exception as e:
+            # 显示错误消息
+            import tkinter as tk
+            from tkinter import messagebox
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showerror("配置加载失败", f"加载配置文件时出错：\n{str(e)}")
+            root.destroy()
+    
+    def _reinitialize_battle(self):
+        """重新初始化战斗系统以应用新配置"""
+        # 重新创建怪物配置
+        monster_configs = []
+        for monster_type in Config.MONSTER_TYPES:
+            monster_config = Config.MONSTER_TYPES[monster_type].copy()
+            monster_configs.append(monster_config)
+        
+        # 重新创建战斗实例
+        self.battle = MultiMonsterBattle(monster_configs)
+        self._render_monsters_area()
+        # 重置UI状态
+        self.show_target_selection = False
+        self.selected_skill = None
+        self.selected_target = None
         self.show_strategy_result = False
         self.optimal_strategy = None
         self.strategy_stats = None
@@ -592,6 +682,28 @@ class MultiMonsterBattleUI:
             self.screen.blit(text_surface, text_rect)
             
             y_offset += 37
+        
+        # 配置加载按钮
+        config_button_y = self.skill_area.y + y_offset + 10
+        self.load_config_button = pygame.Rect(
+            self.skill_area.x + 10,
+            config_button_y,
+            280, 32
+        )
+        
+        # 按钮阴影
+        shadow_button = pygame.Rect(self.load_config_button.x + 2, self.load_config_button.y + 2, 
+                                   self.load_config_button.width, self.load_config_button.height)
+        pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], shadow_button)
+        
+        # 按钮背景
+        pygame.draw.rect(self.screen, Config.COLORS['INFO'], self.load_config_button)
+        pygame.draw.rect(self.screen, Config.COLORS['PRIMARY'], self.load_config_button, 2)
+        
+        # 按钮文字
+        config_text = self._render_mixed_text("📁 加载JSON配置", 'small', Config.COLORS['WHITE'])
+        text_rect = config_text.get_rect(center=self.load_config_button.center)
+        self.screen.blit(config_text, text_rect)
     
     def _render_player_area(self):
         """渲染玩家区域"""
