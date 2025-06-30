@@ -554,16 +554,6 @@ class ResourcePathPlanner:
         row, col = now
         # 根据迷宫格子的字符类型设置基础价值
         cell = maze[row][col]
-        if cell == ' ':  # 空白区域
-            dp[row][col] = 0
-        elif cell == 'T':  # 目标区域
-            dp[row][col] = -3
-        elif cell in ['B', 'L']:  # 不良区域
-            dp[row][col] = 0
-        elif cell == 'G':  # 优质区域
-            dp[row][col] = 5
-        elif cell == '#':  # 墙壁
-            dp[row][col] = 0
 
         # 如果当前格子是墙壁，直接返回0
         if cell == '#':
@@ -655,6 +645,16 @@ class ResourcePathPlanner:
         vis = [[False for _ in range(c)] for _ in range(r)]
         # 初始化动态规划数组，用于存储每个格子的价值
         dp = [[0 for _ in range(c)] for _ in range(r)]
+        for i in range(c):
+            for j in range(c):
+                if(maze[i][j]=='T'):
+                    dp[i][j]=-3
+                elif(maze[i][j]=='G'):
+                    dp[i][j]=5
+                else:
+                    dp[i][j]=0
+
+        
 
         # 寻找起点位置
         start_pos = None
@@ -702,8 +702,17 @@ class ResourcePathPlanner:
         # 计算路径上每个位置周边可达区域的价值
         for step in range(len(road)):
             i, j = now
-            # 为路径上的位置设置高价值
-            dp[i][j] = 1000
+
+            # 将状态从上一步转移到当前步
+            direction = road[step-1]
+            if direction == 'R':
+                dp[i][j]+=dp[i][j-1]
+            elif direction == 'L':
+                dp[i][j]+=dp[i][j+1]
+            elif direction == 'D':
+                dp[i][j]+=dp[i-1][j]
+            elif direction == 'U':
+                dp[i][j]+=dp[i+1][j]
 
             # 检查当前位置的四个相邻方向
             for dx, dy in self.mov:
@@ -716,6 +725,8 @@ class ResourcePathPlanner:
                     self.judge_dp((ni, nj), maze, vis, dp)
                     # 标记相邻位置为未访问，以便后续其他路径可以访问
                     vis[ni][nj] = False
+                    if(dp[ni][nj]):
+                        dp[i][j]+=dp[ni][nj]
 
             # 沿着 A* 算法找到的路径移动
             direction = road[step]
