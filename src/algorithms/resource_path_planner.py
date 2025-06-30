@@ -35,6 +35,9 @@ class ResourcePathPlanner:
         self._find_key_positions()
         # 分析资源依赖关系
         self._build_resource_dependencies()
+        self.mov = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+        # Corresponding direction characters
+        self.ch = "RLDU"
 
     def _find_key_positions(self):
         """
@@ -90,19 +93,25 @@ class ResourcePathPlanner:
         """
         return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
 
-    def _a_star_path(self, start: Tuple[int, int], goal: Tuple[int, int]) -> List[Tuple[int, int]]:
+    import heapq
+    from typing import Tuple, List
+
+    def _a_star_path(self, start: Tuple[int, int], goal: Tuple[int, int]) -> str:
         """
-        使用A*算法找到两点间的最短路径
+        使用A*算法找到两点间的最短路径，返回RLDU移动序列
 
         Args:
-            start: 起始位置
-            goal: 目标位置
+            start: 起始位置 (row, col)
+            goal: 目标位置 (row, col)
 
         Returns:
-            List[Tuple[int, int]]: 路径坐标列表
+            str: 由'R'（右）、'L'（左）、'D'（下）、'U'（上）组成的移动序列
         """
         if start == goal:
-            return [start]
+            return ""
+
+        # 定义方向及其对应的字符
+        directions = [(0, 1, 'R'), (1, 0, 'D'), (0, -1, 'L'), (-1, 0, 'U')]
 
         open_set = [(0, start)]
         came_from = {}
@@ -113,24 +122,29 @@ class ResourcePathPlanner:
             current = heapq.heappop(open_set)[1]
 
             if current == goal:
-                # 重构路径
+                # 重构路径并转换为移动序列
                 path = []
                 while current in came_from:
-                    path.append(current)
-                    current = came_from[current]
-                path.append(start)
+                    prev = came_from[current]
+                    # 找出移动方向
+                    dx = current[0] - prev[0]
+                    dy = current[1] - prev[1]
+                    # 匹配方向字符
+                    for d in directions:
+                        if d[0] == dx and d[1] == dy:
+                            path.append(d[2])
+                            break
+                    current = prev
                 path.reverse()
-                return path
+                return ''.join(path)
 
             # 检查四个方向
-            directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
-
-            for dx, dy in directions:
+            for dx, dy, direction in directions:
                 neighbor = (current[0] + dx, current[1] + dy)
 
                 # 检查边界和墙壁
                 if (0 <= neighbor[0] < self.size and 0 <= neighbor[1] < self.size and
-                    self.maze[neighbor[0]][neighbor[1]] != Config.WALL):
+                        self.maze[neighbor[0]][neighbor[1]] != Config.WALL):
 
                     tentative_g_score = g_score[current] + 1
 
@@ -140,8 +154,7 @@ class ResourcePathPlanner:
                         f_score[neighbor] = tentative_g_score + self._manhattan_distance(neighbor, goal)
                         heapq.heappush(open_set, (f_score[neighbor], neighbor))
 
-        return []  # 无法到达目标
-
+        return ""  # 无法到达目标
     def _find_all_paths_to_resource(self, target_pos: Tuple[int, int]) -> List[List[Tuple[int, int]]]:
         """
         找到从起点到目标资源的所有可能路径
@@ -524,21 +537,259 @@ class ResourcePathPlanner:
 
         return ordered_resources
 
-    def find_maximum_value_path(self) -> Dict:
+    def judge_dp(self, now: Tuple[int, int], maze: List[str], vis: List[List[bool]], dp: List[List[int]]) -> int:
         """
-        找到最大价值路径，优先使用陷阱权衡策略
+        使用动态规划方法计算从指定位置开始的可达区域的价值。
+
+        Args:
+            now (Tuple[int, int]): 当前位置的坐标 (row, col)
+            maze (List[str]): 迷宫矩阵，每个元素代表一个格子的类型
+            vis (List[List[bool]]): 二维布尔数组，用于标记每个格子是否被访问过
+            dp (List[List[int]]): 二维数组，用于存储每个格子的价值
 
         Returns:
-            Dict: 最大价值路径结果
+            int: 当前位置的最终价值
         """
-        # 首先尝试陷阱权衡策略
-        trap_result = self.find_maximum_value_path_with_traps()
-        
-        if trap_result['success'] and trap_result.get('net_value', trap_result['total_value']) > 0:
-            return trap_result
+        # 解包当前位置的行和列坐标
+        row, col = now
+        # 根据迷宫格子的字符类型设置基础价值
+        cell = maze[row][col]
+        if cell == ' ':  # 空白区域
+            dp[row][col] = 0
+        elif cell == 'T':  # 目标区域
+            dp[row][col] = -3
+        elif cell in ['B', 'L']:  # 不良区域
+            dp[row][col] = 0
+        elif cell == 'G':  # 优质区域
+            dp[row][col] = 5
+        elif cell == '#':  # 墙壁
+            dp[row][col] = 0
 
-        # 回退到原始策略
-        return self._find_maximum_value_path_without_traps()
+        # 如果当前格子是墙壁，直接返回0
+        if cell == '#':
+            return 0
+
+        # 检查当前位置的四个相邻方向
+        for i in range(4):
+            # 获取当前方向的偏移量
+            dx, dy = self.mov[i]
+            # 计算相邻位置的坐标
+            new_row, new_col = row + dx, col + dy
+
+            # 检查相邻位置是否在迷宫范围内且未被访问过
+            if (0 <= new_row < len(maze) and 0 <= new_col < len(maze[0])
+                    and not vis[new_row][new_col]):
+                # 标记相邻位置为已访问
+                vis[new_row][new_col] = True
+                # 递归计算相邻位置的价值，并取其与0的最大值累加到当前位置的价值上
+                dp[row][col] += max(0, self.judge_dp((new_row, new_col), maze, vis, dp))
+                # 标记相邻位置为未访问，以便后续其他路径可以访问
+                vis[new_row][new_col] = False
+
+        return dp[row][col]
+
+    def get_way(self, now: Tuple[int, int], maze: List[str], vis: List[List[bool]],
+                way: List[str], pos: str, dp: List[List[int]]):
+        """
+        递归地寻找有价值区域的路径，并将路径方向添加到结果列表中。
+
+        Args:
+            now (Tuple[int, int]): 当前位置的坐标 (row, col)
+            maze (List[str]): 迷宫矩阵，每个元素代表一个格子的类型
+            vis (List[List[bool]]): 二维布尔数组，用于标记每个格子是否被访问过
+            way (List[str]): 存储路径方向的列表
+            pos (str): 当前移动的方向字符 ('R', 'L', 'D', 'U')
+            dp (List[List[int]]): 二维数组，存储每个格子的价值
+        """
+        # 将当前移动方向添加到路径列表中
+        way.append(pos)
+
+        # 检查当前位置的四个相邻方向
+        for i in range(4):
+            # 获取当前方向的偏移量
+            dx, dy = self.mov[i]
+            # 计算相邻位置的坐标
+            new_row, new_col = now[0] + dx, now[1] + dy
+
+            # 检查相邻位置是否在迷宫范围内且未被访问过
+            if (0 <= new_row < len(maze) and 0 <= new_col < len(maze[0])
+                    and not vis[new_row][new_col]):
+                # 标记相邻位置为已访问
+                vis[new_row][new_col] = True
+                # 如果相邻位置有价值，递归调用 get_way 方法继续寻找路径
+                if dp[new_row][new_col] > 0:
+                    self.get_way((new_row, new_col), maze, vis, way, self.ch[i], dp)
+                # 标记相邻位置为未访问，以便后续其他路径可以访问
+                vis[new_row][new_col] = False
+
+        # 添加反向移动方向，用于回溯操作
+        if pos == 'L':
+            way.append('R')
+        elif pos == 'R':
+            way.append('L')
+        elif pos == 'D':
+            way.append('U')
+        elif pos == 'U':
+            way.append('D')
+
+    def find_maximum_value_path(self) -> Dict:
+        """
+        寻找最大价值路径。结合 A* 算法找到的基础路径，探索路径周边有价值的区域，
+        最终构建出包含这些有价值区域的完整路径。
+
+        Returns:
+            Dict: 包含路径信息的字典，包含成功标志、消息、路径和总价值
+        """
+        # 获取迷宫矩阵
+        maze = self.maze
+        # 使用 A* 算法找到从起点到终点的路径
+        road = self._a_star_path(self.start_pos, self.exit_pos)
+        # 用于存储最终的路径方向
+        way = []
+        # 获取迷宫的行数
+        r = len(maze)
+        # 获取迷宫的列数，如果迷宫为空则列数为 0
+        c = len(maze[0]) if r > 0 else 0
+
+        # 初始化访问标记数组，用于记录每个格子是否被访问过
+        vis = [[False for _ in range(c)] for _ in range(r)]
+        # 初始化动态规划数组，用于存储每个格子的价值
+        dp = [[0 for _ in range(c)] for _ in range(r)]
+
+        # 寻找起点位置
+        start_pos = None
+        for i in range(r):
+            for j in range(c):
+                if maze[i][j] == 'S':
+                    start_pos = (i, j)
+                    break
+            if start_pos is not None:
+                break
+
+        # 如果未找到起点，按要求返回包含错误信息的字典
+        if not start_pos:
+            return {
+                'success': False,
+                'message': '未找到起点',
+                'path': [],
+                'total_value': 0
+            }
+
+        # 当前位置设为起点
+        now = start_pos
+        # 标记起点为已访问
+        vis[now[0]][now[1]] = True
+
+        # 沿着 A* 算法找到的路径移动，并标记路径上的位置为已访问
+        for direction in road:
+            i, j = now
+            if direction == 'R':
+                j += 1
+            elif direction == 'L':
+                j -= 1
+            elif direction == 'D':
+                i += 1
+            elif direction == 'U':
+                i -= 1
+
+            if 0 <= i < r and 0 <= j < c:
+                vis[i][j] = True
+                now = (i, j)
+
+        # 将当前位置重置为起点
+        now = start_pos
+
+        # 计算路径上每个位置周边可达区域的价值
+        for step in range(len(road)):
+            i, j = now
+            # 为路径上的位置设置高价值
+            dp[i][j] = 1000
+
+            # 检查当前位置的四个相邻方向
+            for dx, dy in self.mov:
+                ni, nj = i + dx, j + dy
+                if (0 <= ni < r and 0 <= nj < c
+                        and not vis[ni][nj]):
+                    # 标记相邻位置为已访问
+                    vis[ni][nj] = True
+                    # 计算相邻位置的价值
+                    self.judge_dp((ni, nj), maze, vis, dp)
+                    # 标记相邻位置为未访问，以便后续其他路径可以访问
+                    vis[ni][nj] = False
+
+            # 沿着 A* 算法找到的路径移动
+            direction = road[step]
+            if direction == 'R':
+                now = (i, j + 1)
+            elif direction == 'L':
+                now = (i, j - 1)
+            elif direction == 'D':
+                now = (i + 1, j)
+            elif direction == 'U':
+                now = (i - 1, j)
+
+        # 打印 dp 数组，用于调试
+        for row in dp:
+            print(" ".join(f"{val:5}" for val in row))
+        print()
+
+        # 将当前位置重置为起点
+        now = start_pos
+
+        # 构建最终路径
+        for step in range(len(road)):
+            i, j = now
+
+            # 检查当前位置的四个相邻方向，寻找有价值的区域
+            for dx, dy in self.mov:
+                ni, nj = i + dx, j + dy
+                if (0 <= ni < r and 0 <= nj < c
+                        and not vis[ni][nj]):
+                    # 标记相邻位置为已访问
+                    vis[ni][nj] = True
+                    if dp[ni][nj] > 0:
+                        # 递归寻找有价值区域的路径
+                        self.get_way((ni, nj), maze, vis, way, self.ch[self.mov.index((dx, dy))], dp)
+                    # 标记相邻位置为未访问，以便后续其他路径可以访问
+                    vis[ni][nj] = False
+
+            # 沿着 A* 算法找到的路径移动
+            direction = road[step]
+            if direction == 'R':
+                now = (i, j + 1)
+            elif direction == 'L':
+                now = (i, j - 1)
+            elif direction == 'D':
+                now = (i + 1, j)
+            elif direction == 'U':
+                now = (i - 1, j)
+            # 将当前移动方向添加到路径列表中
+            way.append(direction)
+
+        # 初始化最终路径，起点为路径的第一个元素
+        path = [self.start_pos]
+        # 当前行和列坐标初始化为起点坐标
+        current_row, current_col = self.start_pos
+        # 方向字符到坐标偏移量的映射
+        direction_map = {
+            'R': (0, 1),
+            'L': (0, -1),
+            'D': (1, 0),
+            'U': (-1, 0)
+        }
+        # 根据路径方向列表构建完整的路径坐标列表
+        for direction in way:
+            dr, dc = direction_map[direction]
+            current_row += dr
+            current_col += dc
+            path.append((current_row, current_col))
+
+        return {
+            'success': True,
+            'message': 'OK',
+            'path': path,
+            'total_value': dp[self.exit_pos[0]][self.exit_pos[1]],
+        }
 
     def _find_maximum_value_path_without_traps(self) -> Dict:
         """

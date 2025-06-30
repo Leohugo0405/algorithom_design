@@ -1286,7 +1286,7 @@ class GameEngine:
         self.resource_path_planner.start_pos = self.player_pos
         
         try:
-            # 使用新的最大价值路径方法，不考虑步数限制
+            # 使用新的最大价值路径方法
             result = self.resource_path_planner.find_maximum_value_path()
             return result
         finally:
