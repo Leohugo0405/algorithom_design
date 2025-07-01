@@ -43,14 +43,29 @@ class Config:
                 # 更新默认BOSS血量为第一个值
                 cls.BOSS_HP = boss_hp_list[0]
                 
-                # 如果有多个BOSS血量，可以扩展MONSTER_TYPES
+                # 如果有多个BOSS血量，完全重新构建MONSTER_TYPES
                 if len(boss_hp_list) > 1:
-                    # 为不同难度的BOSS创建配置
-                    boss_configs ={}
+                    # 为不同难度的BOSS创建配置，完全替换原有配置
+                    new_monster_types = {}
                     for i, hp in enumerate(boss_hp_list):
-                        boss_configs[f'boss_{i}'] = {'name': f'第{i+1}个BOSS', 'hp': hp}
-    
-                    cls.MONSTER_TYPES.update(boss_configs)
+                        new_monster_types[f'boss_{i}'] = {
+                            'name': f'第{i+1}个BOSS', 
+                            'hp': hp,
+                            'attack': 10,  # 默认攻击力
+                            'defense': 2   # 默认防御力
+                        }
+                    # 完全替换MONSTER_TYPES
+                    cls.MONSTER_TYPES = new_monster_types
+                else:
+                    # 只有一个BOSS时，创建单个BOSS配置
+                    cls.MONSTER_TYPES = {
+                        'boss_0': {
+                            'name': 'BOSS',
+                            'hp': boss_hp_list[0],
+                            'attack': 10,
+                            'defense': 2
+                        }
+                    }
             
             # 更新玩家技能
             if 'PlayerSkills' in config_data and config_data['PlayerSkills']:

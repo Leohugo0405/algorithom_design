@@ -36,13 +36,41 @@ class MultiMonsterBattleUI:
             scenario_name: 战斗场景名称
         """
         self.scenario_name = scenario_name
-        self.scenario = Config.MULTI_BATTLE_SCENARIOS[scenario_name]
         
-        # 创建怪物配置
+        # 创建怪物配置 - 动态适应当前配置
+        self._initialize_battle_from_current_config()
+        
+    def _initialize_battle_from_current_config(self):
+        """
+        根据当前配置初始化战斗系统
+        """
         monster_configs = []
-        for monster_type in self.scenario['monsters']:
-            monster_config = Config.MONSTER_TYPES[monster_type].copy()
-            monster_configs.append(monster_config)
+        
+        # 检查是否有预定义场景且场景中的怪物类型存在
+        if (self.scenario_name in Config.MULTI_BATTLE_SCENARIOS and 
+            all(monster_type in Config.MONSTER_TYPES 
+                for monster_type in Config.MULTI_BATTLE_SCENARIOS[self.scenario_name]['monsters'])):
+            # 使用预定义场景
+            self.scenario = Config.MULTI_BATTLE_SCENARIOS[self.scenario_name]
+            for monster_type in self.scenario['monsters']:
+                monster_config = Config.MONSTER_TYPES[monster_type].copy()
+                monster_configs.append(monster_config)
+        else:
+            # 使用当前可用的怪物类型创建默认场景
+            available_monsters = list(Config.MONSTER_TYPES.keys())
+            if available_monsters:
+                # 创建动态场景
+                self.scenario = {
+                    'name': '当前配置战斗',
+                    'monsters': available_monsters[:min(3, len(available_monsters))]  # 最多3个怪物
+                }
+                for monster_type in self.scenario['monsters']:
+                    monster_config = Config.MONSTER_TYPES[monster_type].copy()
+                    monster_configs.append(monster_config)
+            else:
+                # 如果没有可用怪物，创建默认配置
+                self.scenario = {'name': '默认战斗', 'monsters': []}
+                monster_configs = [{'name': '默认敌人', 'hp': 50, 'attack': 10, 'defense': 2}]
         
         self.battle = MultiMonsterBattle(monster_configs)
         
@@ -64,7 +92,13 @@ class MultiMonsterBattleUI:
         self.strategy_stats = None
         self.monster_targets = {}
         
-        # 滚动状态
+        # 滚动状态 - 分别为技能区域和怪物区域
+        self.skill_scroll_offset = 0
+        self.skill_max_scroll_offset = 0
+        self.monster_scroll_offset = 0
+        self.monster_max_scroll_offset = 0
+        
+        # 策略结果滚动状态（保持原有功能）
         self.scroll_offset = 0
         self.max_scroll_offset = 0
         
@@ -250,9 +284,9 @@ class MultiMonsterBattleUI:
             
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 4:  # 滚轮向上
-                    self._handle_scroll_up()
+                    self._handle_scroll_up(event.pos)
                 elif event.button == 5:  # 滚轮向下
-                    self._handle_scroll_down()
+                    self._handle_scroll_down(event.pos)
                 else:
                     self._handle_mouse_click(event.pos)
     
@@ -418,15 +452,12 @@ class MultiMonsterBattleUI:
     
     def _reinitialize_battle(self):
         """重新初始化战斗系统以应用新配置"""
-        # 重新创建怪物配置
-        monster_configs = []
-        for monster_type in Config.MONSTER_TYPES:
-            monster_config = Config.MONSTER_TYPES[monster_type].copy()
-            monster_configs.append(monster_config)
+        # 使用动态初始化逻辑重新创建战斗系统
+        self._initialize_battle_from_current_config()
         
-        # 重新创建战斗实例
-        self.battle = MultiMonsterBattle(monster_configs)
-        self._render_monsters_area()
+        # 强制刷新UI
+        self._render()
+        pygame.display.flip()
         # 重置UI状态
         self.show_target_selection = False
         self.selected_skill = None
@@ -435,96 +466,123 @@ class MultiMonsterBattleUI:
         self.optimal_strategy = None
         self.strategy_stats = None
         self.monster_targets = {}
+        
+        # 重置所有滚动状态
+        self.skill_scroll_offset = 0
+        self.skill_max_scroll_offset = 0
+        self.monster_scroll_offset = 0
+        self.monster_max_scroll_offset = 0
         self.scroll_offset = 0
         self.max_scroll_offset = 0
     
-    def _handle_scroll_up(self):
+    def _handle_scroll_up(self, mouse_pos: Tuple[int, int]):
         """处理向上滚动"""
         if self.show_strategy_result:
             self.scroll_offset = max(0, self.scroll_offset - 30)
+        elif self.skill_area.collidepoint(mouse_pos):
+            # 技能区域滚动
+            self.skill_scroll_offset = max(0, self.skill_scroll_offset - 30)
+        elif self.monsters_area.collidepoint(mouse_pos):
+            # 怪物区域滚动
+            self.monster_scroll_offset = max(0, self.monster_scroll_offset - 30)
     
-    def _handle_scroll_down(self):
+    def _handle_scroll_down(self, mouse_pos: Tuple[int, int]):
         """处理向下滚动"""
         if self.show_strategy_result:
             self.scroll_offset = min(self.max_scroll_offset, self.scroll_offset + 30)
+        elif self.skill_area.collidepoint(mouse_pos):
+            # 技能区域滚动
+            self.skill_scroll_offset = min(self.skill_max_scroll_offset, self.skill_scroll_offset + 30)
+        elif self.monsters_area.collidepoint(mouse_pos):
+            # 怪物区域滚动
+            self.monster_scroll_offset = min(self.monster_max_scroll_offset, self.monster_scroll_offset + 30)
     
     def _find_multi_target_strategy(self, monsters_info: List[Dict], player_resources: int) -> Dict:
-        """寻找多目标战斗策略"""
-        # 提取怪物血量和设置优先级顺序
-        monster_hps = [m['hp'] for m in monsters_info]
-        # 默认优先级：按血量从低到高击败（可以根据需要调整）
-        target_priorities = sorted(range(len(monsters_info)), key=lambda i: monsters_info[i]['hp'])
+        """寻找Boss战斗策略"""
+        # 导入BossStrategy
+        from ..algorithms.boss_strategy import BossStrategy
         
-        # 使用新的多目标BOSS策略算法
-        strategy_optimizer = MultiTargetBossStrategy(
-            monster_hps=monster_hps,
-            target_priorities=target_priorities,
+        # 提取所有怪物的血量列表
+        boss_hps = [monster['hp'] for monster in monsters_info]
+        monster_names = [monster['name'] for monster in monsters_info]
+        
+        if len(monsters_info) > 1:
+            strategy_description = f"针对多个目标的最优策略: {', '.join([f'{name}({hp}HP)' for name, hp in zip(monster_names, boss_hps)])}"
+        else:
+            strategy_description = f"针对 {monster_names[0]} (血量: {boss_hps[0]}) 的最优策略"
+        
+        # 使用BossStrategy算法（支持多Boss）
+        strategy_optimizer = BossStrategy(
+            boss_hps=boss_hps,
             player_resources=player_resources
         )
         
         # 寻找最优策略
-        optimal_sequence, optimal_rounds, stats = strategy_optimizer.find_optimal_strategy(max_rounds=25)
+        result = strategy_optimizer.find_optimal_strategy(max_rounds=25)
+        if len(result) == 4:
+            optimal_sequence, optimal_rounds, stats, best_targets = result
+        else:
+            # 向后兼容
+            optimal_sequence, optimal_rounds, stats = result
+            best_targets = None
         
         # 转换结果格式
-        strategy_sequence = []
+        strategy_sequence = optimal_sequence if optimal_sequence else []
         target_assignments = {}
         
         if optimal_sequence:
-            # 模拟技能序列执行，计算每步后的怪物血量
-            current_monster_hps = [m['hp'] for m in monsters_info]
+            # 模拟技能序列执行，验证策略
+            # 如果算法返回了目标序列，使用它；否则让模拟函数自动生成
+            simulation = strategy_optimizer.simulate_battle(optimal_sequence, best_targets)
             
-            for i, (skill_name, target_id) in enumerate(optimal_sequence):
-                strategy_sequence.append(skill_name)
-                
-                if target_id >= 0 and target_id < len(monsters_info):
-                    skill_info = Config.SKILLS[skill_name]
-                    damage = skill_info.get('damage', 0)
-                    
-                    # 计算技能执行前的血量
-                    hp_before = current_monster_hps[target_id]
-                    
-                    # 应用伤害
-                    if 'damage' in skill_info:
-                        current_monster_hps[target_id] = max(0, current_monster_hps[target_id] - damage)
-                    
-                    # 计算技能执行后的血量
-                    hp_after = current_monster_hps[target_id]
-                    
-                    target_assignments[i] = {
-                        'monster_id': target_id,
-                        'monster_name': monsters_info[target_id]['name'],
-                        'damage': damage,
-                        'remaining_hp': hp_after
-                    }
-                else:
-                    # 非攻击技能（如治疗）
-                    target_assignments[i] = {
-                        'monster_id': -1,
-                        'monster_name': '自身',
-                        'damage': 0,
-                        'remaining_hp': 'N/A'
-                    }
+            if simulation['success']:
+                # 为每个技能分配目标（基于算法返回的目标序列）
+                for i, skill_name in enumerate(optimal_sequence):
+                    if skill_name in Config.SKILLS and i < len(simulation['battle_log']):
+                        skill_info = Config.SKILLS[skill_name]
+                        damage = skill_info.get('damage', 0)
+                        log_entry = simulation['battle_log'][i]
+                        target_idx = log_entry.get('target_idx', -1)
+                        
+                        if damage > 0 and target_idx >= 0 and target_idx < len(monsters_info):
+                            # 攻击技能
+                            remaining_hp = log_entry['boss_hps'][target_idx] if 'boss_hps' in log_entry else 0
+                            target_assignments[i] = {
+                                'monster_id': target_idx,
+                                'monster_name': monsters_info[target_idx]['name'],
+                                'damage': damage,
+                                'remaining_hp': remaining_hp
+                            }
+                        else:
+                            # 非攻击技能
+                            target_assignments[i] = {
+                                'monster_id': -1,
+                                'monster_name': '自身',
+                                'damage': 0,
+                                'remaining_hp': 'N/A'
+                            }
         
         # 计算成功率
         success = optimal_sequence is not None and len(optimal_sequence) > 0
         
         # 合并统计信息
         final_stats = {
-            'nodes_explored': stats.get('nodes_explored', 0),
-            'nodes_pruned': stats.get('nodes_pruned', 0),
-            'states_cached': stats.get('states_cached', 0),
-            'optimal_rounds': stats.get('optimal_rounds', -1),
+            'explored_states': stats.get('explored_states', 0),
+            'pruned_states': stats.get('pruned_states', 0),
+            'max_depth': stats.get('max_depth', 0),
+            'computation_time': stats.get('computation_time', 0.0),
+            'optimal_rounds': optimal_rounds,
             'success': success,
-            'defeated_order': stats.get('defeated_order', []),
-            'order_score': stats.get('order_score', 0),
-            'algorithm': 'MultiTargetBossStrategy'
+            'total_damage': sum(Config.SKILLS[skill].get('damage', 0) for skill in strategy_sequence if skill in Config.SKILLS),
+            'average_damage_per_round': sum(Config.SKILLS[skill].get('damage', 0) for skill in strategy_sequence if skill in Config.SKILLS) / max(1, len(strategy_sequence)) if strategy_sequence else 0,
+            'algorithm': 'BossStrategy'
         }
         
         return {
             'sequence': strategy_sequence if success else None,
             'targets': target_assignments,
             'stats': final_stats,
-            'strategy_description': strategy_optimizer.get_strategy_description() if success else "未找到有效策略"
+            'strategy_description': strategy_description if success else "未找到有效策略"
         }
     
     def _select_best_skill(self, target_hp: int, available_resources: int = None) -> Optional[str]:
@@ -638,11 +696,27 @@ class MultiMonsterBattleUI:
         title_text_rect = skill_title.get_rect(center=(title_rect.centerx, title_rect.centery))
         self.screen.blit(skill_title, title_text_rect)
         
+        # 创建可滚动内容区域
+        content_area = pygame.Rect(self.skill_area.x, self.skill_area.y + 25, self.skill_area.width - 15, self.skill_area.height - 25)
+        
+        # 计算总内容高度
+        skill_count = len(Config.SKILLS)
+        total_content_height = skill_count * 37 + 50  # 技能按钮 + 配置按钮
+        
+        # 更新滚动范围
+        self.skill_max_scroll_offset = max(0, total_content_height - content_area.height)
+        self.skill_scroll_offset = min(self.skill_scroll_offset, self.skill_max_scroll_offset)
+        
+        # 设置裁剪区域
+        pygame.draw.rect(self.screen, Config.COLORS['PANEL_BG'], content_area)
+        old_clip = self.screen.get_clip()
+        self.screen.set_clip(content_area)
+        
         # 技能按钮
         available_skills = self.battle.get_available_skills()
         self.skill_buttons.clear()
         
-        y_offset = 35
+        y_offset = 35 - self.skill_scroll_offset
         for skill_name, skill_info in Config.SKILLS.items():
             button_rect = pygame.Rect(
                 self.skill_area.x + 10,
@@ -691,19 +765,40 @@ class MultiMonsterBattleUI:
             280, 32
         )
         
-        # 按钮阴影
-        shadow_button = pygame.Rect(self.load_config_button.x + 2, self.load_config_button.y + 2, 
-                                   self.load_config_button.width, self.load_config_button.height)
-        pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], shadow_button)
+        # 只有在可见区域内才绘制按钮
+        if config_button_y + 32 > self.skill_area.y + 25 and config_button_y < self.skill_area.y + self.skill_area.height:
+            # 按钮阴影
+            shadow_button = pygame.Rect(self.load_config_button.x + 2, self.load_config_button.y + 2, 
+                                       self.load_config_button.width, self.load_config_button.height)
+            pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], shadow_button)
+            
+            # 按钮背景
+            pygame.draw.rect(self.screen, Config.COLORS['INFO'], self.load_config_button)
+            pygame.draw.rect(self.screen, Config.COLORS['PRIMARY'], self.load_config_button, 2)
+            
+            # 按钮文字
+            config_text = self._render_mixed_text("📁 加载JSON配置", 'small', Config.COLORS['WHITE'])
+            text_rect = config_text.get_rect(center=self.load_config_button.center)
+            self.screen.blit(config_text, text_rect)
         
-        # 按钮背景
-        pygame.draw.rect(self.screen, Config.COLORS['INFO'], self.load_config_button)
-        pygame.draw.rect(self.screen, Config.COLORS['PRIMARY'], self.load_config_button, 2)
+        # 恢复裁剪区域
+        self.screen.set_clip(old_clip)
         
-        # 按钮文字
-        config_text = self._render_mixed_text("📁 加载JSON配置", 'small', Config.COLORS['WHITE'])
-        text_rect = config_text.get_rect(center=self.load_config_button.center)
-        self.screen.blit(config_text, text_rect)
+        # 绘制滚动条（如果需要）
+        if self.skill_max_scroll_offset > 0:
+            scrollbar_x = self.skill_area.x + self.skill_area.width - 12
+            scrollbar_y = self.skill_area.y + 25
+            scrollbar_height = self.skill_area.height - 25
+            
+            # 滚动条背景
+            scrollbar_bg = pygame.Rect(scrollbar_x, scrollbar_y, 10, scrollbar_height)
+            pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], scrollbar_bg)
+            
+            # 滚动条滑块
+            thumb_height = max(20, int(scrollbar_height * content_area.height / total_content_height))
+            thumb_y = scrollbar_y + int((scrollbar_height - thumb_height) * self.skill_scroll_offset / self.skill_max_scroll_offset)
+            thumb_rect = pygame.Rect(scrollbar_x + 1, thumb_y, 8, thumb_height)
+            pygame.draw.rect(self.screen, Config.COLORS['WARNING'], thumb_rect)
     
     def _render_player_area(self):
         """渲染玩家区域"""
@@ -785,12 +880,27 @@ class MultiMonsterBattleUI:
         title_text_rect = monster_title.get_rect(center=(title_rect.centerx, title_rect.centery))
         self.screen.blit(monster_title, title_text_rect)
         
+        # 创建可滚动内容区域
+        content_area = pygame.Rect(self.monsters_area.x, self.monsters_area.y + 25, self.monsters_area.width - 15, self.monsters_area.height - 25)
+        
         # 怪物列表
         battle_state = self.battle.get_battle_state()
         monsters = battle_state['monsters']
         self.monster_buttons.clear()
         
-        y_offset = 35
+        # 计算总内容高度
+        monster_card_height = 65
+        total_content_height = len(monsters) * monster_card_height
+        
+        # 更新滚动范围
+        self.monster_max_scroll_offset = max(0, total_content_height - content_area.height)
+        self.monster_scroll_offset = min(self.monster_scroll_offset, self.monster_max_scroll_offset)
+        
+        # 设置裁剪区域
+        old_clip = self.screen.get_clip()
+        self.screen.set_clip(content_area)
+        
+        y_offset = 35 - self.monster_scroll_offset
         for monster in monsters:
             monster_rect = pygame.Rect(
                 self.monsters_area.x + 10,
@@ -872,6 +982,25 @@ class MultiMonsterBattleUI:
             self.screen.blit(status_surface, (monster_rect.x + 240, monster_rect.y + 22))
             
             y_offset += 65
+        
+        # 恢复裁剪区域
+        self.screen.set_clip(old_clip)
+        
+        # 绘制滚动条（如果需要）
+        if self.monster_max_scroll_offset > 0:
+            scrollbar_x = self.monsters_area.x + self.monsters_area.width - 12
+            scrollbar_y = self.monsters_area.y + 25
+            scrollbar_height = self.monsters_area.height - 25
+            
+            # 滚动条背景
+            scrollbar_bg = pygame.Rect(scrollbar_x, scrollbar_y, 10, scrollbar_height)
+            pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], scrollbar_bg)
+            
+            # 滚动条滑块
+            thumb_height = max(20, int(scrollbar_height * content_area.height / total_content_height))
+            thumb_y = scrollbar_y + int((scrollbar_height - thumb_height) * self.monster_scroll_offset / self.monster_max_scroll_offset)
+            thumb_rect = pygame.Rect(scrollbar_x + 1, thumb_y, 8, thumb_height)
+            pygame.draw.rect(self.screen, Config.COLORS['DANGER'], thumb_rect)
     
     def _render_target_selection(self):
         """渲染目标选择区域"""
@@ -1038,9 +1167,10 @@ class MultiMonsterBattleUI:
             y_offset += 30
             
             stats_info = [
-                f"探索节点数: {self.strategy_stats['nodes_explored']}",
-                f"剪枝节点数: {self.strategy_stats['nodes_pruned']}",
-                f"缓存状态数: {self.strategy_stats['states_cached']}",
+                f"探索节点数: {self.strategy_stats.get('explored_states', self.strategy_stats.get('nodes_explored', 0))}",
+                f"剪枝节点数: {self.strategy_stats.get('pruned_states', self.strategy_stats.get('nodes_pruned', 0))}",
+                f"最大深度: {self.strategy_stats.get('max_depth', 0)}",
+                f"计算时间: {self.strategy_stats.get('computation_time', 0.0):.3f}秒",
                 f"最优回合数: {self.strategy_stats['optimal_rounds']}",
                 f"策略成功: {'是' if self.strategy_stats.get('success', False) else '否'}",
                 f"算法类型: {self.strategy_stats.get('algorithm', 'Unknown')}"
