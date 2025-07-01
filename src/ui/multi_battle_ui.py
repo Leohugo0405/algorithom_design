@@ -59,10 +59,10 @@ class MultiMonsterBattleUI:
             # 使用当前可用的怪物类型创建默认场景
             available_monsters = list(Config.MONSTER_TYPES.keys())
             if available_monsters:
-                # 创建动态场景
+                # 创建动态场景，使用JSON文件中所有的boss
                 self.scenario = {
                     'name': '当前配置战斗',
-                    'monsters': available_monsters[:min(3, len(available_monsters))]  # 最多3个怪物
+                    'monsters': available_monsters  # 使用所有可用的怪物，不限制数量
                 }
                 for monster_type in self.scenario['monsters']:
                     monster_config = Config.MONSTER_TYPES[monster_type].copy()

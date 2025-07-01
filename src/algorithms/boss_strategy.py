@@ -90,7 +90,7 @@ class BossStrategy:
     
     def find_optimal_strategy(self, max_rounds: int = 20) -> Tuple[Optional[List[str]], int, Dict]:
         """
-        使用分支限界算法找到最优战斗策略
+        使用优化的分支限界算法找到最优战斗策略
         
         Args:
             max_rounds: 最大回合数限制
@@ -113,12 +113,15 @@ class BossStrategy:
             target_sequence=[]
         )
         
-        # 优先队列（最小堆）
+        # 优先队列（最小堆），使用启发式函数
         priority_queue = [initial_state]
         self.explored_states = set()
         self.best_solution = None
         self.explored_count = 0
         self.pruned_count = 0
+        
+        # 状态压缩缓存
+        self.state_cache = {}
         
         while priority_queue:
             current_state = heapq.heappop(priority_queue)
@@ -127,8 +130,8 @@ class BossStrategy:
             # 更新最大深度
             max_depth = max(max_depth, current_state.rounds_used)
             
-            # 生成状态键用于去重
-            state_key = self._get_state_key(current_state)
+            # 优化的状态去重：使用压缩的状态键
+            state_key = self._compress_state(current_state)
             if state_key in self.explored_states:
                 continue
             self.explored_states.add(state_key)
@@ -149,6 +152,7 @@ class BossStrategy:
                 if is_better:
                     self.best_solution = current_state.skill_sequence[:]
                     self.best_state = current_state  # 保存最优状态
+                    print(f"找到更优解，回合数: {len(self.best_solution)}")
                 continue
             
             # 剪枝条件
@@ -161,7 +165,9 @@ class BossStrategy:
             
             for successor in successors:
                 if successor.is_valid():
-                    heapq.heappush(priority_queue, successor)
+                    successor_key = self._compress_state(successor)
+                    if successor_key not in self.explored_states:
+                        heapq.heappush(priority_queue, successor)
         
         # 统计信息
         computation_time = time.time() - start_time
@@ -172,6 +178,11 @@ class BossStrategy:
             'computation_time': computation_time,
             'optimal_rounds': len(self.best_solution) if self.best_solution else -1
         }
+        
+        print(f"探索状态数: {self.explored_count}")
+        print(f"剪枝状态数: {self.pruned_count}")
+        if self.best_solution:
+            print(f"最优解回合数: {len(self.best_solution)}")
         
         # 如果找到最优解，还需要返回对应的目标序列
         best_targets = None
@@ -185,6 +196,22 @@ class BossStrategy:
                 best_targets = [log['target_idx'] for log in simulation['battle_log']]
 
         return self.best_solution, len(self.best_solution) if self.best_solution else -1, stats, best_targets
+    
+    def _compress_state(self, state: BattleState) -> tuple:
+        """
+        压缩状态表示，减少内存使用和提高比较效率
+        
+        Args:
+            state: 战斗状态
+        
+        Returns:
+            tuple: 压缩的状态键
+        """
+        # 只保留关键信息：回合数、Boss血量、关键技能冷却
+        active_cooldowns = tuple(sorted(
+            (skill, cd) for skill, cd in state.skill_cooldowns.items() if cd > 0
+        ))
+        return (state.rounds_used, tuple(state.boss_hps), active_cooldowns)
     
     def _get_state_key(self, state: BattleState) -> Tuple:
         """
@@ -204,7 +231,7 @@ class BossStrategy:
     
     def _should_prune(self, state: BattleState, max_rounds: int) -> bool:
         """
-        判断是否应该剪枝
+        优化的剪枝策略：丢弃代价超过当前最优解的节点
         
         Args:
             state: 当前状态
@@ -213,21 +240,181 @@ class BossStrategy:
         Returns:
             bool: 是否剪枝
         """
-        # 超过最大回合数
+        # 1. 超过最大回合数限制
         if state.rounds_used >= max_rounds:
             return True
         
-        # 如果已有最优解，且当前路径不可能更优
+        # 2. 严格的最优解剪枝：如果当前回合数已经达到或超过最优解，直接剪枝
         if (self.best_solution is not None and 
             state.rounds_used >= len(self.best_solution)):
             return True
         
-        # 乐观估计：即使每回合都用最高伤害也无法获胜
-        max_damage_per_round = max(s['damage'] for s in Config.SKILLS.values() if 'damage' in s)
-        remaining_rounds = max_rounds - state.rounds_used
-        total_remaining_hp = sum(max(0, hp) for hp in state.boss_hps)
-        if total_remaining_hp > max_damage_per_round * remaining_rounds:
+        # 3. 更精确的下界估计剪枝：如果下界估计已经不优于当前最优解
+        lower_bound = self._calculate_lower_bound(state)
+        if (self.best_solution is not None and 
+            lower_bound >= len(self.best_solution)):
             return True
+        
+        # 3.5. 动态剪枝：根据搜索深度动态调整剪枝阈值
+        if self._dynamic_pruning_check(state):
+            return True
+        
+        # 4. 乐观估计剪枝：即使使用最优策略也无法在剩余回合内获胜
+        if not self._can_possibly_win(state, max_rounds):
+            return True
+        
+        # 5. 支配性剪枝：如果存在更优的状态已被探索
+        if self._is_dominated_state(state):
+            return True
+        
+        return False
+    
+    def _dynamic_pruning_check(self, state: BattleState) -> bool:
+        """
+        动态剪枝检查：根据搜索进度和当前状态质量进行剪枝
+        
+        Args:
+            state: 当前状态
+        
+        Returns:
+            bool: 是否应该剪枝
+        """
+        # 如果搜索深度过深且没有明显进展，进行剪枝
+        if hasattr(self, 'explored_count') and self.explored_count > 10000:
+            # 在大量搜索后，对质量较差的状态进行更激进的剪枝
+            if (self.best_solution is not None and 
+                state.rounds_used >= len(self.best_solution) * 0.8):
+                return True
+        
+        # 资源耗尽检查：如果玩家资源不足以完成战斗
+        if hasattr(state, 'player_resources'):
+            # 这里可以添加更复杂的资源检查逻辑
+            pass
+        
+        return False
+    
+    def _calculate_lower_bound(self, state: BattleState) -> int:
+        """
+        计算完成战斗所需的最少回合数下界
+        
+        Args:
+            state: 当前状态
+        
+        Returns:
+            int: 下界估计
+        """
+        total_remaining_hp = sum(max(0, hp) for hp in state.boss_hps)
+        if total_remaining_hp <= 0:
+            return state.rounds_used
+        
+        # 考虑技能冷却的最优伤害序列
+        available_skills = []
+        for skill_name, skill_info in self.skills.items():
+            damage = skill_info.get('damage', 0)
+            cooldown = skill_info.get('cooldown', 0)
+            if damage > 0:
+                available_skills.append((damage, cooldown, skill_name))
+        
+        if not available_skills:
+            return float('inf')
+        
+        # 排序：优先考虑伤害/冷却比率高的技能
+        available_skills.sort(key=lambda x: x[0] / (x[1] + 1), reverse=True)
+        
+        # 模拟最优技能使用序列
+        remaining_hp = total_remaining_hp
+        rounds_needed = 0
+        skill_cooldowns = state.skill_cooldowns.copy()
+        
+        while remaining_hp > 0 and rounds_needed < 50:  # 防止无限循环
+            best_skill = None
+            best_damage = 0
+            
+            # 找到当前可用的最佳技能
+            for damage, cooldown, skill_name in available_skills:
+                if skill_cooldowns.get(skill_name, 0) <= 0 and damage > best_damage:
+                    best_skill = (damage, cooldown, skill_name)
+                    best_damage = damage
+            
+            if best_skill is None:
+                # 没有可用技能，所有技能冷却减1
+                for skill_name in skill_cooldowns:
+                    skill_cooldowns[skill_name] = max(0, skill_cooldowns[skill_name] - 1)
+                rounds_needed += 1
+                continue
+            
+            # 使用最佳技能
+            damage, cooldown, skill_name = best_skill
+            remaining_hp -= damage
+            rounds_needed += 1
+            
+            # 更新冷却
+            for skill_name_cd in skill_cooldowns:
+                skill_cooldowns[skill_name_cd] = max(0, skill_cooldowns[skill_name_cd] - 1)
+            skill_cooldowns[skill_name] = cooldown
+        
+        return state.rounds_used + rounds_needed
+    
+    def _can_possibly_win(self, state: BattleState, max_rounds: int) -> bool:
+        """
+        检查在剩余回合内是否可能获胜
+        
+        Args:
+            state: 当前状态
+            max_rounds: 最大回合数
+        
+        Returns:
+            bool: 是否可能获胜
+        """
+        remaining_rounds = max_rounds - state.rounds_used
+        if remaining_rounds <= 0:
+            return state.is_victory()
+        
+        total_remaining_hp = sum(max(0, hp) for hp in state.boss_hps)
+        if total_remaining_hp <= 0:
+            return True
+        
+        # 计算理论最大伤害输出
+        max_damage_per_round = 0
+        if self.skills:
+            damages = [skill.get('damage', 0) for skill in self.skills.values()]
+            max_damage_per_round = max(damages) if damages else 0
+        
+        # 乐观估计：假设每回合都能造成最大伤害
+        max_possible_damage = max_damage_per_round * remaining_rounds
+        
+        return max_possible_damage >= total_remaining_hp
+    
+    def _is_dominated_state(self, state: BattleState) -> bool:
+        """
+        检查当前状态是否被已探索的状态支配
+        一个状态A支配状态B，当且仅当：
+        1. A的回合数 <= B的回合数
+        2. A的所有Boss血量 <= B的对应Boss血量
+        3. A的技能冷却状态 <= B的技能冷却状态
+        
+        Args:
+            state: 当前状态
+        
+        Returns:
+            bool: 是否被支配
+        """
+        # 为了性能考虑，这里使用简化的支配性检查
+        # 只检查相同回合数下的状态
+        current_key = (state.rounds_used, tuple(state.boss_hps))
+        
+        # 检查是否存在更优的相似状态
+        for explored_key in self.explored_states:
+            if isinstance(explored_key, tuple) and len(explored_key) >= 2:
+                explored_rounds = explored_key[0] if isinstance(explored_key[0], int) else 0
+                explored_boss_hps = explored_key[1] if isinstance(explored_key[1], tuple) else ()
+                
+                # 如果找到回合数相同但Boss血量更低的状态，则当前状态被支配
+                if (explored_rounds == state.rounds_used and 
+                    len(explored_boss_hps) == len(state.boss_hps) and
+                    all(explored_hp <= current_hp for explored_hp, current_hp in zip(explored_boss_hps, state.boss_hps)) and
+                    explored_boss_hps != tuple(state.boss_hps)):  # 不是完全相同的状态
+                    return True
         
         return False
     
