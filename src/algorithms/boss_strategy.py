@@ -52,6 +52,35 @@ class BattleState:
         """检查是否获胜（所有Boss都被击败）"""
         return all(hp <= 0 for hp in self.boss_hps)
     
+    def is_valid_defeat_order(self) -> bool:
+        """检查当前击败顺序是否符合要求（按照B数组索引顺序）"""
+        defeated_bosses = []
+        alive_bosses = []
+        
+        for i, hp in enumerate(self.boss_hps):
+            if hp <= 0:
+                defeated_bosses.append(i)
+            else:
+                alive_bosses.append(i)
+        
+        # 如果没有boss被击败，顺序是正确的
+        if not defeated_bosses:
+            return True
+        
+        # 检查已击败的boss是否按照索引顺序（必须是连续的从0开始）
+        expected_defeated = list(range(len(defeated_bosses)))
+        if defeated_bosses != expected_defeated:
+            return False
+        
+        # 检查是否有跳过的boss（即存在未击败的boss的索引小于已击败的最大索引）
+        if defeated_bosses and alive_bosses:
+            max_defeated_idx = max(defeated_bosses)
+            min_alive_idx = min(alive_bosses)
+            if min_alive_idx < max_defeated_idx:
+                return False
+        
+        return True
+    
     def is_valid(self) -> bool:
         """检查状态是否有效"""
         return self.rounds_used >= 0 and self.player_resources >= 0
@@ -136,8 +165,8 @@ class BossStrategy:
                 continue
             self.explored_states.add(state_key)
             
-            # 检查是否获胜
-            if current_state.is_victory():
+            # 检查是否获胜且击败顺序正确
+            if current_state.is_victory() and current_state.is_valid_defeat_order():
                 is_better = False
                 if self.best_solution is None:
                     is_better = True
@@ -263,7 +292,11 @@ class BossStrategy:
         if not self._can_possibly_win(state, max_rounds):
             return True
         
-        # 5. 支配性剪枝：如果存在更优的状态已被探索
+        # 5. 击败顺序剪枝：如果当前状态的击败顺序已经违反了要求，则剪枝
+        if not state.is_valid_defeat_order():
+            return True
+        
+        # 6. 支配性剪枝：如果存在更优的状态已被探索
         if self._is_dominated_state(state):
             return True
         
@@ -435,10 +468,15 @@ class BossStrategy:
             if not self._can_use_skill(state, skill_name):
                 continue
             
-            # 如果是攻击技能，为每个活着的Boss生成后继状态
+            # 如果是攻击技能，按照B数组顺序优先选择目标
             if skill_info.get('damage', 0) > 0:
-                for target_idx, boss_hp in enumerate(state.boss_hps):
-                    if boss_hp > 0:  # 只攻击活着的Boss
+                # 按照JSON文件中B数组的顺序击败boss
+                # 优先攻击序号靠前的boss
+                alive_bosses = [(i, hp) for i, hp in enumerate(state.boss_hps) if hp > 0]
+                if alive_bosses:
+                    # 按照索引顺序排序，优先选择序号靠前的boss
+                    alive_bosses.sort(key=lambda x: x[0])
+                    for target_idx, boss_hp in alive_bosses:
                         new_state = self._apply_skill(state, skill_name, target_idx)
                         if new_state.is_valid():
                             successors.append(new_state)
@@ -535,10 +573,13 @@ class BossStrategy:
             for skill_name in skill_sequence:
                 skill = self.skills[skill_name]
                 if skill.get('damage', 0) > 0:
-                    # 选择血量最高的活着的Boss
+                    # 按照JSON文件中B数组的顺序击败boss
+                    # 优先攻击序号靠前且血量最低的boss
                     alive_bosses = [(i, hp) for i, hp in enumerate(current_boss_hps) if hp > 0]
                     if alive_bosses:
-                        target_idx = max(alive_bosses, key=lambda x: x[1])[0]
+                        # 按照索引顺序排序，然后选择血量最低的
+                        # 这样确保按照B数组的顺序击败boss
+                        target_idx = min(alive_bosses, key=lambda x: (x[0], x[1]))[0]
                         target_sequence.append(target_idx)
                         # 模拟伤害以更新血量，用于下次目标选择
                         damage = skill.get('damage', 0)
