@@ -349,9 +349,7 @@ class MultiMonsterBattleUI:
             
             # 检查自动战斗按钮
             if self.auto_battle_button.collidepoint(pos):
-                if self.auto_battle_active:
-                    self._stop_auto_battle()
-                else:
+                if not self.auto_battle_active:
                     self._start_auto_battle()
             
 
@@ -1199,7 +1197,7 @@ class MultiMonsterBattleUI:
     
     def _render_auto_battle_button(self):
         """渲染自动战斗按钮"""
-        if not self.battle.battle_active or self.show_target_selection or self.show_strategy_result:
+        if not self.battle.battle_active or self.show_target_selection or self.show_strategy_result or self.auto_battle_active:
             return
         
         # 按钮阴影
@@ -1207,15 +1205,10 @@ class MultiMonsterBattleUI:
                                    self.auto_battle_button.width, self.auto_battle_button.height)
         pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], shadow_button)
         
-        # 根据自动战斗状态选择颜色
-        if self.auto_battle_active:
-            button_color = Config.COLORS['DANGER']
-            border_color = Config.COLORS['DANGER']
-            button_text_content = "⏹️ 停止自动战斗"
-        else:
-            button_color = Config.COLORS['SUCCESS']
-            border_color = Config.COLORS['SUCCESS']
-            button_text_content = "⚡ 自动战斗"
+        # 按钮颜色和文字
+        button_color = Config.COLORS['SUCCESS']
+        border_color = Config.COLORS['SUCCESS']
+        button_text_content = "⚡ 自动战斗"
         
         # 按钮背景
         pygame.draw.rect(self.screen, button_color, self.auto_battle_button)
@@ -1225,14 +1218,6 @@ class MultiMonsterBattleUI:
         button_text = self._render_mixed_text(button_text_content, 'small', Config.COLORS['WHITE'])
         text_rect = button_text.get_rect(center=self.auto_battle_button.center)
         self.screen.blit(button_text, text_rect)
-        
-        # 如果正在自动战斗，显示进度信息
-        if self.auto_battle_active and self.auto_battle_sequence:
-            progress_text = f"步骤 {self.auto_battle_step + 1}/{len(self.auto_battle_sequence)}"
-            progress_surface = self._render_mixed_text(progress_text, 'small', Config.COLORS['YELLOW'])
-            progress_rect = pygame.Rect(self.auto_battle_button.x, self.auto_battle_button.y - 20, 
-                                      self.auto_battle_button.width, 15)
-            self.screen.blit(progress_surface, (progress_rect.x + 5, progress_rect.y))
     
     def _render_strategy_result(self):
         """渲染策略优化结果"""
