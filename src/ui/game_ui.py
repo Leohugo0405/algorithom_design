@@ -608,20 +608,24 @@ class GameUI:
         pygame.display.set_mode((Config.WINDOW_WIDTH, Config.WINDOW_HEIGHT))
         pygame.display.set_caption(Config.WINDOW_TITLE)
 
-    def _handle_multi_monster_battle(self, interaction: Dict):
+    def _handle_multi_monster_battle(self, interaction: Dict, auto_start_battle: bool = False):
         """
         处理多怪物战斗遭遇事件
         
         Args:
             interaction: 交互信息
+            auto_start_battle: 是否自动开始战斗（导航时为True，手动移动时为False）
         """
         from .multi_battle_ui import MultiMonsterBattleUI
         
         scenario = interaction.get('scenario', 'medium')
-        self.add_message(f"进入多怪物战斗界面... {interaction.get('message', '')}")
+        if auto_start_battle:
+            self.add_message(f"进入多怪物战斗界面，自动开始战斗... {interaction.get('message', '')}")
+        else:
+            self.add_message(f"进入多怪物战斗界面... {interaction.get('message', '')}")
         
-        # 创建并运行多怪物战斗UI，传递当前玩家资源值，并自动开始战斗
-        battle_ui = MultiMonsterBattleUI(scenario, self.game_engine.player_resources, auto_start_battle=True)
+        # 创建并运行多怪物战斗UI，根据参数决定是否自动开始战斗
+        battle_ui = MultiMonsterBattleUI(scenario, self.game_engine.player_resources, auto_start_battle=auto_start_battle)
         battle_result = battle_ui.run()
         
         # 处理战斗结果
@@ -1658,7 +1662,7 @@ class GameUI:
                         
                         # 处理boss战斗
                         if boss_interaction.get('type') == 'multi_monster_battle':
-                            self._handle_multi_monster_battle(boss_interaction)
+                            self._handle_multi_monster_battle(boss_interaction, auto_start_battle=True)
                         
                         # 战斗结束后恢复导航
                         self.visual_navigation_active = True
@@ -1779,7 +1783,7 @@ class GameUI:
                         
                         # 处理boss战斗
                         if boss_interaction.get('type') == 'multi_monster_battle':
-                            self._handle_multi_monster_battle(boss_interaction)
+                            self._handle_multi_monster_battle(boss_interaction, auto_start_battle=True)
                         
                         # 战斗结束后恢复导航
                         self.ai_navigation_active = True
