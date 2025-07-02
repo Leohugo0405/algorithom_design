@@ -581,8 +581,13 @@ class GameUI:
             'position': self.game_engine.player_pos
         }
         
+        # 检查是否有记住的JSON文件路径
+        remembered_json_file = None
+        if hasattr(self.game_engine, 'current_json_file_path') and self.game_engine.current_json_file_path:
+            remembered_json_file = self.game_engine.current_json_file_path
+        
         # 创建并运行解谜界面
-        lock_ui = LockUI(self.game_engine, lock_data)
+        lock_ui = LockUI(self.game_engine, lock_data, remembered_json_file)
         puzzle_result = lock_ui.run()
         
         # 处理解谜结果

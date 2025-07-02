@@ -7,25 +7,35 @@
 
 import pygame
 import sys
+import json
+import tkinter as tk
+from tkinter import filedialog
 from typing import Dict, List, Tuple, Optional
 from src.config import Config
 from src.game_engine import GameEngine
+from src.algorithms.Lock import PasswordLock
 
 class LockUI:
-    def __init__(self, game_engine: GameEngine, lock_data: Dict):
+    def __init__(self, game_engine: GameEngine, lock_data: Dict, remembered_json_file: str = None):
         self.game_engine = game_engine
         self.lock_data = lock_data
+        self.remembered_json_file = remembered_json_file
         self.screen = None
         self.clock = None
         self.font = None
         self.small_font = None
         self.title_font = None
         
-        # 在终端输出猜谜答案
+        # 初始化密码锁
+        self.password_lock = PasswordLock()
+        
+        # 生成答案的哈希值
         if 'puzzle' in lock_data and 'password' in lock_data['puzzle']:
             password = lock_data['puzzle']['password']
             password_str = ''.join(map(str, password))
+            self.password_hash = self.password_lock.hash_password(password_str)
             print(f"[调试信息] 密码锁答案: {password_str}")
+            print(f"[调试信息] 密码哈希值: {self.password_hash}")
         
         # 清除可能存在的定时器，防止影响新的解谜界面
         pygame.time.set_timer(pygame.USEREVENT + 1, 0)
@@ -209,9 +219,10 @@ class LockUI:
         button_width = 100
         button_height = 35
         
-        self.clear_button = pygame.Rect(320, 540, button_width, button_height)
-        self.submit_button = pygame.Rect(430, 540, button_width, button_height)
-        self.auto_solve_button = pygame.Rect(540, 540, button_width, button_height)
+        self.clear_button = pygame.Rect(220, 540, button_width, button_height)
+        self.submit_button = pygame.Rect(330, 540, button_width, button_height)
+        self.auto_solve_button = pygame.Rect(440, 540, button_width, button_height)
+        self.load_json_button = pygame.Rect(550, 540, button_width, button_height)
         self.back_button = pygame.Rect(50, 50, 80, 30)
     
     def run(self) -> Dict:
@@ -221,6 +232,10 @@ class LockUI:
         Returns:
             Dict: 解谜结果
         """
+        # 检查是否有记住的JSON文件，如果有就自动加载
+        if self.remembered_json_file:
+            self._load_json_file_auto(self.remembered_json_file)
+        
         while self.running:
             # 处理事件
             self._handle_events()
@@ -303,6 +318,9 @@ class LockUI:
         elif self.auto_solve_button.collidepoint(pos):
             self._auto_solve()
         
+        elif self.load_json_button.collidepoint(pos):
+            self._load_json_file()
+        
         elif self.back_button.collidepoint(pos):
             self.result_message = "解谜取消"
             self.running = False
@@ -318,8 +336,8 @@ class LockUI:
             return
         
         # 检查答案是否正确
-        correct_password = self.lock_data['puzzle']['password']
-        if self.current_input == correct_password:
+        test_password = ''.join(map(str, self.current_input))
+        if self.password_lock.verify_password(test_password, self.password_hash):
             self.puzzle_solved = True
             self.result_message = "密码正确！解锁成功！"
             self.show_result = True
@@ -353,13 +371,227 @@ class LockUI:
             self.show_result = True
             self.result_start_time = pygame.time.get_ticks()
         
-        # correct_password = self.lock_data['puzzle']['password']
-        # self.puzzle_solved = True
-        # self.result_message = f"AI解谜成功！密码是{correct_password[0]}{correct_password[1]}{correct_password[2]}"
-        # self.show_result = True
-        # self.result_start_time = pygame.time.get_ticks()
-        # # 延迟3秒后退出
-        # pygame.time.set_timer(pygame.USEREVENT + 1, 3000)
+    def _load_json_file(self):
+        """
+        打开JSON文件并解析密码
+        """
+        try:
+            # 隐藏pygame窗口，显示文件选择对话框
+            root = tk.Tk()
+            root.withdraw()  # 隐藏主窗口
+            
+            file_path = filedialog.askopenfilename(
+                title="选择JSON文件",
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+            )
+            
+            root.destroy()
+            
+            if not file_path:
+                return
+            
+            # 读取JSON文件
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # 提取C和L
+            C = data.get('C', [])
+            L = data.get('L', '')
+            
+            if not C:
+                self.result_message = "JSON文件中未找到'C'字段！"
+                self.show_result = True
+                self.result_start_time = pygame.time.get_ticks()
+                return
+            
+            # 调用密码破解算法
+            ans, times = self._puzzle_solver(C, L)
+            
+            if ans != -1:
+                # 解密成功
+                self.puzzle_solved = True
+                cost = times - 1
+                self.result_message = f"JSON解密成功！密码是{ans}，尝试了{times}次，消耗资源{cost}"
+                
+                # 减少资源
+                if hasattr(self.game_engine, 'player_resources'):
+                    self.game_engine.player_resources = self.game_engine.player_resources - cost - 20
+                
+                self.show_result = True
+                self.result_start_time = pygame.time.get_ticks()
+                # 延迟3秒后退出
+                pygame.time.set_timer(pygame.USEREVENT + 1, 3000)
+            else:
+                self.result_message = f"JSON解密失败，尝试了{times}次"
+                self.show_result = True
+                self.result_start_time = pygame.time.get_ticks()
+                
+        except Exception as e:
+            self.result_message = f"读取JSON文件失败：{str(e)}"
+            self.show_result = True
+            self.result_start_time = pygame.time.get_ticks()
+    
+    def _load_json_file_auto(self, file_path: str):
+        """
+        自动加载指定的JSON文件并解析密码
+        
+        Args:
+            file_path: JSON文件路径
+        """
+        try:
+            # 读取JSON文件
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # 提取C和L
+            C = data.get('C', [])
+            L = data.get('L', '')
+            
+            if not C:
+                self.result_message = "记住的JSON文件中未找到'C'字段！"
+                self.show_result = True
+                self.result_start_time = pygame.time.get_ticks()
+                return
+            
+            # 调用密码破解算法
+            ans, times = self._puzzle_solver(C, L)
+            
+            if ans != -1:
+                # 解密成功
+                self.puzzle_solved = True
+                cost = times - 1
+                self.result_message = f"自动JSON解密成功！密码是{ans}，尝试了{times}次，消耗资源{cost}"
+                
+                # 减少资源
+                if hasattr(self.game_engine, 'player_resources'):
+                    self.game_engine.player_resources = self.game_engine.player_resources - cost - 20
+                
+                self.show_result = True
+                self.result_start_time = pygame.time.get_ticks()
+                # 延迟3秒后退出
+                pygame.time.set_timer(pygame.USEREVENT + 1, 3000)
+            else:
+                self.result_message = f"自动JSON解密失败，尝试了{times}次"
+                self.show_result = True
+                self.result_start_time = pygame.time.get_ticks()
+                
+        except Exception as e:
+            self.result_message = f"自动读取JSON文件失败：{str(e)}"
+            self.show_result = True
+            self.result_start_time = pygame.time.get_ticks()
+    
+    def _puzzle_solver(self, C: List[List[int]], L: str) -> Tuple[int, int]:
+        """
+        密码破解算法（Python版本的C++代码实现）
+        
+        Args:
+            C: 二维数组，包含约束条件
+            L: 目标哈希字符串
+            
+        Returns:
+            Tuple[int, int]: (答案, 尝试次数)
+        """
+        times = 0
+        flag = 0
+        ANS = [-3, -3, -3]
+        prime = [2, 3, 5, 7]
+        
+        # 解析约束条件
+        for constraint in C:
+            if len(constraint) == 3:
+                for j in range(3):
+                    if constraint[j] != -1:
+                        ANS[j] = constraint[j]
+                        break
+            else:
+                if constraint[0] == -1:
+                    flag = 1
+                else:
+                    if ANS[constraint[0] - 1] == -3:
+                        ANS[constraint[0] - 1] = constraint[1] - 2
+        
+        # 根据flag选择不同的搜索策略
+        if flag:
+            # 使用素数搜索
+            for i in range(4):
+                for j in range(4):
+                    for k in range(4):
+                        if self._judge1(i, j, k, ANS):
+                            times += 1
+                            ans_str = str(prime[i]) + str(prime[j]) + str(prime[k])
+                            if self.password_lock.verify_password(ans_str, L):
+                                return int(ans_str), times
+        else:
+            # 使用普通数字搜索
+            for i in range(10):
+                for j in range(10):
+                    for k in range(10):
+                        if self._judge(i, j, k, ANS):
+                            times += 1
+                            ans_str = str(i) + str(j) + str(k)
+                            if self.password_lock.verify_password(ans_str, L):
+                                return int(ans_str), times
+        
+        return -1, times
+    
+    def _judge1(self, a: int, b: int, c: int, ANS: List[int]) -> bool:
+        """
+        判断素数约束条件
+        """
+        prime = [2, 3, 5, 7]
+        
+        if a == b or b == c or a == c:
+            return False
+        
+        if ANS[0] >= 0 and ANS[0] != prime[a]:
+            return False
+        if ANS[1] >= 0 and ANS[1] != prime[b]:
+            return False
+        if ANS[2] >= 0 and ANS[2] != prime[c]:
+            return False
+        
+        if ANS[0] == -2 and a != 0:  # 第一位应该是偶数(2)
+            return False
+        if ANS[1] == -2 and b != 0:
+            return False
+        if ANS[2] == -2 and c != 0:
+            return False
+        
+        if ANS[0] == -1 and a == 0:  # 第一位应该是奇数(不是2)
+            return False
+        if ANS[1] == -1 and b == 0:
+            return False
+        if ANS[2] == -1 and c == 0:
+            return False
+        
+        return True
+    
+    def _judge(self, a: int, b: int, c: int, ANS: List[int]) -> bool:
+        """
+        判断普通数字约束条件
+        """
+        if ANS[0] >= 0 and ANS[0] != a:
+            return False
+        if ANS[1] >= 0 and ANS[1] != b:
+            return False
+        if ANS[2] >= 0 and ANS[2] != c:
+            return False
+        
+        if ANS[0] == -2 and a % 2 != 0:  # 应该是偶数
+            return False
+        if ANS[1] == -2 and b % 2 != 0:
+            return False
+        if ANS[2] == -2 and c % 2 != 0:
+            return False
+        
+        if ANS[0] == -1 and a % 2 == 0:  # 应该是奇数
+            return False
+        if ANS[1] == -1 and b % 2 == 0:
+            return False
+        if ANS[2] == -1 and c % 2 == 0:
+            return False
+        
+        return True
 
     
     def _render(self):
@@ -474,6 +706,13 @@ class LockUI:
         auto_text = self._render_mixed_text("AI解谜", 'small', Config.COLORS['WHITE'])
         auto_rect = auto_text.get_rect(center=self.auto_solve_button.center)
         self.screen.blit(auto_text, auto_rect)
+        
+        # 打开JSON文件按钮
+        pygame.draw.rect(self.screen, Config.COLORS['PURPLE'], self.load_json_button)
+        pygame.draw.rect(self.screen, Config.COLORS['BLACK'], self.load_json_button, 2)
+        json_text = self._render_mixed_text("打开JSON", 'small', Config.COLORS['WHITE'])
+        json_rect = json_text.get_rect(center=self.load_json_button.center)
+        self.screen.blit(json_text, json_rect)
         
         # 返回按钮
         pygame.draw.rect(self.screen, Config.COLORS['GRAY'], self.back_button)
