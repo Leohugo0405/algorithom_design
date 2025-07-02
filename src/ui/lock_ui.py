@@ -16,10 +16,11 @@ from src.game_engine import GameEngine
 from src.algorithms.Lock import PasswordLock
 
 class LockUI:
-    def __init__(self, game_engine: GameEngine, lock_data: Dict, remembered_json_file: str = None):
+    def __init__(self, game_engine: GameEngine, lock_data: Dict, remembered_json_file: str = None, auto_solve: bool = False):
         self.game_engine = game_engine
         self.lock_data = lock_data
         self.remembered_json_file = remembered_json_file
+        self.auto_solve = auto_solve
         self.screen = None
         self.clock = None
         self.font = None
@@ -235,6 +236,10 @@ class LockUI:
         # 检查是否有记住的JSON文件，如果有就自动加载
         if self.remembered_json_file:
             self._load_json_file_auto(self.remembered_json_file)
+        
+        # 如果设置了自动解谜，则在主循环开始前自动解谜
+        if self.auto_solve:
+            self._auto_solve()
         
         while self.running:
             # 处理事件

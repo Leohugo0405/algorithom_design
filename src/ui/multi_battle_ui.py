@@ -28,16 +28,18 @@ class MultiMonsterBattleUI:
     多怪物战斗用户界面类
     """
     
-    def __init__(self, scenario_name: str = 'medium', player_resources: int = 100):
+    def __init__(self, scenario_name: str = 'medium', player_resources: int = 100, auto_start_battle: bool = False):
         """
         初始化多怪物战斗UI
         
         Args:
             scenario_name: 战斗场景名称
             player_resources: 玩家当前资源值
+            auto_start_battle: 是否自动开始战斗
         """
         self.scenario_name = scenario_name
         self.player_resources = player_resources
+        self.auto_start_battle = auto_start_battle
         
         # 创建怪物配置 - 动态适应当前配置
         self._initialize_battle_from_current_config()
@@ -269,6 +271,10 @@ class MultiMonsterBattleUI:
     
     def run(self) -> Dict:
         """运行战斗界面主循环"""
+        # 如果设置了自动开始战斗，则在主循环开始前启动自动战斗
+        if self.auto_start_battle and self.battle.battle_active:
+            self._start_auto_battle()
+        
         while self.running:
             self._handle_events()
             self._update()

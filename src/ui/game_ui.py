@@ -586,8 +586,8 @@ class GameUI:
         if hasattr(self.game_engine, 'current_json_file_path') and self.game_engine.current_json_file_path:
             remembered_json_file = self.game_engine.current_json_file_path
         
-        # 创建并运行解谜界面
-        lock_ui = LockUI(self.game_engine, lock_data, remembered_json_file)
+        # 创建并运行解谜界面，自动解谜
+        lock_ui = LockUI(self.game_engine, lock_data, remembered_json_file, auto_solve=True)
         puzzle_result = lock_ui.run()
         
         # 处理解谜结果
@@ -620,8 +620,8 @@ class GameUI:
         scenario = interaction.get('scenario', 'medium')
         self.add_message(f"进入多怪物战斗界面... {interaction.get('message', '')}")
         
-        # 创建并运行多怪物战斗UI，传递当前玩家资源值
-        battle_ui = MultiMonsterBattleUI(scenario, self.game_engine.player_resources)
+        # 创建并运行多怪物战斗UI，传递当前玩家资源值，并自动开始战斗
+        battle_ui = MultiMonsterBattleUI(scenario, self.game_engine.player_resources, auto_start_battle=True)
         battle_result = battle_ui.run()
         
         # 处理战斗结果
@@ -1649,11 +1649,37 @@ class GameUI:
                     self.visual_navigation_active = False
                     self.add_message("可视化导航完成！")
                 else:
-                    # 显示当前步骤信息
-                    step_info = f"步骤 {result['current_step']}/{result['total_steps']}"
-                    if 'move_result' in result and result['move_result'].get('resource_collected'):
-                        step_info += " (收集资源)"
-                    self.add_message(step_info)
+                    # 检查是否触发了boss战斗或解密
+                    if result.get('boss_battle_triggered'):
+                        # 暂停导航，处理boss战斗
+                        self.visual_navigation_active = False
+                        boss_interaction = result.get('boss_interaction', {})
+                        self.add_message(f"步骤 {result['current_step']}/{result['total_steps']} - 遭遇Boss，自动开始战斗")
+                        
+                        # 处理boss战斗
+                        if boss_interaction.get('type') == 'multi_monster_battle':
+                            self._handle_multi_monster_battle(boss_interaction)
+                        
+                        # 战斗结束后恢复导航
+                        self.visual_navigation_active = True
+                    elif result.get('puzzle_triggered'):
+                        # 暂停导航，处理解密
+                        self.visual_navigation_active = False
+                        puzzle_interaction = result.get('puzzle_interaction', {})
+                        self.add_message(f"步骤 {result['current_step']}/{result['total_steps']} - 遭遇解密方格，自动开始解谜")
+                        
+                        # 处理解密
+                        if puzzle_interaction.get('type') == 'puzzle':
+                            self._handle_lock_encounter(puzzle_interaction)
+                        
+                        # 解密结束后恢复导航
+                        self.visual_navigation_active = True
+                    else:
+                        # 显示当前步骤信息
+                        step_info = f"步骤 {result['current_step']}/{result['total_steps']}"
+                        if 'move_result' in result and result['move_result'].get('resource_collected'):
+                            step_info += " (收集资源)"
+                        self.add_message(step_info)
             else:
                 # 导航失败
                 self.visual_navigation_active = False
@@ -1744,8 +1770,34 @@ class GameUI:
                     self.ai_navigation_active = False
                     self.add_message("AI最佳路径导航完成！")
                 else:
-                    # 继续导航
-                    self.add_message(f"AI导航步骤 {result['current_step']}/{result['total_steps']}: {result['message']}")
+                    # 检查是否触发了boss战斗或解密
+                    if result.get('boss_battle_triggered'):
+                        # 暂停导航，处理boss战斗
+                        self.ai_navigation_active = False
+                        boss_interaction = result.get('boss_interaction', {})
+                        self.add_message(f"AI导航步骤 {result['current_step']}/{result['total_steps']} - 遭遇Boss，自动开始战斗")
+                        
+                        # 处理boss战斗
+                        if boss_interaction.get('type') == 'multi_monster_battle':
+                            self._handle_multi_monster_battle(boss_interaction)
+                        
+                        # 战斗结束后恢复导航
+                        self.ai_navigation_active = True
+                    elif result.get('puzzle_triggered'):
+                        # 暂停导航，处理解密
+                        self.ai_navigation_active = False
+                        puzzle_interaction = result.get('puzzle_interaction', {})
+                        self.add_message(f"AI导航步骤 {result['current_step']}/{result['total_steps']} - 遭遇解密方格，自动开始解谜")
+                        
+                        # 处理解密
+                        if puzzle_interaction.get('type') == 'puzzle':
+                            self._handle_lock_encounter(puzzle_interaction)
+                        
+                        # 解密结束后恢复导航
+                        self.ai_navigation_active = True
+                    else:
+                        # 继续导航
+                        self.add_message(f"AI导航步骤 {result['current_step']}/{result['total_steps']}: {result['message']}")
             else:
                 # 导航失败
                 self.ai_navigation_active = False

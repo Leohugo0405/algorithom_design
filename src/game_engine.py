@@ -1701,6 +1701,37 @@ class GameEngine:
         if result['success']:
             self.visual_navigation['current_step'] += 1
             
+            # 检查当前位置是否为boss方格或解密方格，如果是则自动触发相应交互
+            interaction = result.get('interaction', {})
+            if interaction.get('type') == 'pending_multi_monster_battle':
+                # 自动触发boss战斗
+                boss_interaction = self.interact_with_special_cell()
+                if boss_interaction.get('success'):
+                    return {
+                        'success': True,
+                        'message': f'执行步骤 {current_step + 1}/{len(steps)}: {step} - 自动触发Boss战斗',
+                        'completed': False,
+                        'current_step': current_step + 1,
+                        'total_steps': len(steps),
+                        'move_result': result,
+                        'boss_battle_triggered': True,
+                        'boss_interaction': boss_interaction
+                    }
+            elif interaction.get('type') == 'pending_puzzle':
+                # 自动触发解密
+                puzzle_interaction = self.interact_with_special_cell()
+                if puzzle_interaction.get('success'):
+                    return {
+                        'success': True,
+                        'message': f'执行步骤 {current_step + 1}/{len(steps)}: {step} - 自动触发解密',
+                        'completed': False,
+                        'current_step': current_step + 1,
+                        'total_steps': len(steps),
+                        'move_result': result,
+                        'puzzle_triggered': True,
+                        'puzzle_interaction': puzzle_interaction
+                    }
+            
             return {
                 'success': True,
                 'message': f'执行步骤 {current_step + 1}/{len(steps)}: {step}',
@@ -1991,6 +2022,41 @@ class GameEngine:
         
         if result['success']:
             self.ai_navigation['current_step'] += 1
+            
+            # 检查当前位置是否为boss方格或解密方格，如果是则自动触发相应交互
+            interaction = result.get('interaction', {})
+            if interaction.get('type') == 'pending_multi_monster_battle':
+                # 自动触发boss战斗
+                boss_interaction = self.interact_with_special_cell()
+                if boss_interaction.get('success'):
+                    return {
+                        'success': True,
+                        'message': f'执行AI导航步骤 {current_step + 1}/{len(steps)}: {step} - 自动触发Boss战斗',
+                        'completed': False,
+                        'current_step': current_step + 1,
+                        'total_steps': len(steps),
+                        'move_result': result,
+                        'optimal_path': self.ai_navigation.get('optimal_path', []),
+                        'max_resource': self.ai_navigation.get('max_resource', 0),
+                        'boss_battle_triggered': True,
+                        'boss_interaction': boss_interaction
+                    }
+            elif interaction.get('type') == 'pending_puzzle':
+                # 自动触发解密
+                puzzle_interaction = self.interact_with_special_cell()
+                if puzzle_interaction.get('success'):
+                    return {
+                        'success': True,
+                        'message': f'执行AI导航步骤 {current_step + 1}/{len(steps)}: {step} - 自动触发解密',
+                        'completed': False,
+                        'current_step': current_step + 1,
+                        'total_steps': len(steps),
+                        'move_result': result,
+                        'optimal_path': self.ai_navigation.get('optimal_path', []),
+                        'max_resource': self.ai_navigation.get('max_resource', 0),
+                        'puzzle_triggered': True,
+                        'puzzle_interaction': puzzle_interaction
+                    }
             
             return {
                 'success': True,
