@@ -493,8 +493,51 @@ class GameUI:
         Args:
             pos: 鼠标点击位置
         """
-        # 可以添加鼠标交互逻辑，比如点击迷宫格子
-        pass
+        # 如果在JSON加载界面
+        if self.show_load_json:
+            center_x = Config.WINDOW_WIDTH // 2
+            # 检查是否点击了浏览文件按钮
+            browse_button_rect = pygame.Rect(center_x - 100, 120, 200, 40)
+            if browse_button_rect.collidepoint(pos):
+                self._show_file_dialog()
+                return
+            
+            # 检查是否点击了文件列表中的某个文件
+            if self.available_json_files:
+                list_start_y = 180
+                item_height = 40
+                visible_items = 10
+                scroll_offset = max(0, self.selected_json_index - visible_items // 2)
+                
+                for i in range(visible_items):
+                    file_index = scroll_offset + i
+                    if file_index >= len(self.available_json_files):
+                        break
+                    
+                    item_y = list_start_y + i * item_height
+                    item_rect = pygame.Rect(center_x - 300, item_y, 600, item_height)
+                    
+                    if item_rect.collidepoint(pos):
+                        self.selected_json_index = file_index
+                        # 双击加载文件
+                        if hasattr(self, '_last_click_time') and pygame.time.get_ticks() - self._last_click_time < 500:
+                            selected_file = self.available_json_files[self.selected_json_index]
+                            load_result = self.game_engine.load_maze_from_json(selected_file['path'])
+                            if load_result['success']:
+                                self.add_message(f"成功加载迷宫: {selected_file['name']}")
+                                self.show_load_json = False
+                                # 同时加载配置信息（如果文件包含配置）
+                                try:
+                                    from .config import Config
+                                    Config.load_from_json(selected_file['path'])
+                                    self.add_message("已同时加载文件中的配置信息")
+                                except Exception:
+                                    pass  # 如果没有配置信息或加载失败，忽略错误
+                            else:
+                                self.add_message(f"加载失败: {load_result['message']}")
+                        self._last_click_time = pygame.time.get_ticks()
+        
+        # 可以添加其他鼠标交互逻辑，比如点击迷宫格子
     
 
     def _play_trap_animation(self):
@@ -1148,7 +1191,7 @@ class GameUI:
         
         # 控制说明 - 分类显示
         controls_data = [
-            ("🎯", "移动", "方向键/WASD", Config.COLORS['CYAN']),
+            ("🎯", "移动", "方向键", Config.COLORS['CYAN']),
             ("⚡", "交互", "Enter", Config.COLORS['WARNING']),
             ("🤖", "自动拾取", "A", Config.COLORS['SUCCESS']),
             ("🚀", "最优路径导航", "X", Config.COLORS['PURPLE']),
@@ -1772,6 +1815,17 @@ class GameUI:
             "dp测试集/medium"
         ]
         
+        # 扫描根目录中的JSON文件
+        root_json_files = glob.glob("*.json")
+        for json_file in root_json_files:
+            rel_path = os.path.relpath(json_file)
+            filename = os.path.basename(json_file)
+            self.available_json_files.append({
+                'path': json_file,
+                'name': filename,
+                'dir': '根目录'
+            })
+        
         for sample_dir in sample_dirs:
             if os.path.exists(sample_dir):
                 json_files = glob.glob(os.path.join(sample_dir, "*.json"))
@@ -1785,8 +1839,51 @@ class GameUI:
                         'dir': sample_dir
                     })
         
-        # 按文件名排序
+        # 排序文件列表
         self.available_json_files.sort(key=lambda x: x['name'])
+    
+    def _show_file_dialog(self):
+        """
+        显示文件选择对话框
+        """
+        import os
+        import tkinter as tk
+        from tkinter import filedialog, messagebox
+        
+        # 创建临时的tkinter窗口用于文件选择
+        root = tk.Tk()
+        root.withdraw()  # 隐藏主窗口
+        
+        # 设置文件选择对话框
+        file_path = filedialog.askopenfilename(
+            title="选择JSON迷宫文件",
+            filetypes=[("JSON文件", "*.json"), ("所有文件", "*.*")],
+            initialdir=os.path.dirname(os.path.abspath(__file__))
+        )
+        
+        if file_path:
+            # 加载选中的文件
+            load_result = self.game_engine.load_maze_from_json(file_path)
+            if load_result['success']:
+                filename = os.path.basename(file_path)
+                self.add_message(f"成功加载迷宫: {filename}")
+                self.show_load_json = False
+                # 同时加载配置信息（如果文件包含配置）
+                try:
+                    from ..config import Config
+                    Config.load_from_json(file_path)
+                    self.add_message("已同时加载文件中的配置信息")
+                except Exception:
+                    pass  # 如果没有配置信息或加载失败，忽略错误
+            else:
+                import tkinter as tk
+                from tkinter import messagebox
+                root = tk.Tk()
+                root.withdraw()
+                messagebox.showerror("加载失败", f"无法加载文件：\n{load_result['message']}")
+                root.destroy()
+        
+        root.destroy()
     
     def _draw_load_json_screen(self):
         """
@@ -1803,6 +1900,16 @@ class GameUI:
         title_surface = self._render_mixed_text(title_text, 'normal', Config.COLORS['PRIMARY'])
         title_rect = title_surface.get_rect(center=(center_x, 80))
         self.screen.blit(title_surface, title_rect)
+        
+        # 添加文件选择按钮
+        browse_button_rect = pygame.Rect(center_x - 100, 120, 200, 40)
+        pygame.draw.rect(self.screen, Config.COLORS['INFO'], browse_button_rect)
+        pygame.draw.rect(self.screen, Config.COLORS['PRIMARY'], browse_button_rect, 2)
+        
+        browse_text = "📂 浏览选择文件"
+        browse_surface = self._render_mixed_text(browse_text, 'normal', Config.COLORS['WHITE'])
+        browse_text_rect = browse_surface.get_rect(center=browse_button_rect.center)
+        self.screen.blit(browse_surface, browse_text_rect)
         
         # 如果没有找到JSON文件
         if not self.available_json_files:

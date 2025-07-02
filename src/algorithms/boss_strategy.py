@@ -108,7 +108,7 @@ class BossStrategy:
         
         self.initial_player_resources = player_resources
         
-        # 技能定义现在直接从Config获取
+        # 直接从Config获取
         self.skills = Config.SKILLS
         
         self.explored_states = set()
@@ -159,7 +159,7 @@ class BossStrategy:
             # 更新最大深度
             max_depth = max(max_depth, current_state.rounds_used)
             
-            # 优化的状态去重：使用压缩的状态键
+            # 使用压缩的状态键
             state_key = self._compress_state(current_state)
             if state_key in self.explored_states:
                 continue
@@ -229,10 +229,8 @@ class BossStrategy:
     def _compress_state(self, state: BattleState) -> tuple:
         """
         压缩状态表示，减少内存使用和提高比较效率
-        
         Args:
             state: 战斗状态
-        
         Returns:
             tuple: 压缩的状态键
         """
@@ -481,7 +479,7 @@ class BossStrategy:
                         if new_state.is_valid():
                             successors.append(new_state)
             else:
-                # 非攻击技能（如治疗、增益等），不需要目标
+                # 非攻击技能，不需要目标
                 new_state = self._apply_skill(state, skill_name, -1)
                 if new_state.is_valid():
                     successors.append(new_state)

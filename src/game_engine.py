@@ -186,6 +186,16 @@ class GameEngine:
             if 'max_resource' in maze_data:
                 self.player_resources = 0  # 重置为0，让玩家重新收集
             
+            # 加载Boss血量和玩家技能配置
+            config_loaded = False
+            if 'B' in maze_data or 'PlayerSkills' in maze_data:
+                # 使用Config类的load_from_json方法加载配置
+                config_result = Config.load_from_json(json_file_path)
+                if config_result:
+                    config_loaded = True
+                    # 重新初始化boss策略以使用新的技能配置
+                    self.boss_strategy = BossStrategy()
+            
             # 设置迷宫来源标记
             self.maze_loaded_from_json = True
             self.current_json_file_path = json_file_path
@@ -197,7 +207,10 @@ class GameEngine:
                 'start_pos': self.start_pos,
                 'exit_pos': self.exit_pos,
                 'loaded_from_file': json_file_path,
-                'has_optimal_path': 'optimal_path' in maze_data
+                'has_optimal_path': 'optimal_path' in maze_data,
+                'config_loaded': config_loaded,
+                'boss_hp_loaded': 'B' in maze_data,
+                'skills_loaded': 'PlayerSkills' in maze_data
             }
             
         except FileNotFoundError:
