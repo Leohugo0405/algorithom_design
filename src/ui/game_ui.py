@@ -2272,7 +2272,6 @@ class GameUI:
         # 重新计算从当前位置到出口的路径
         direct_path_result = self.game_engine.get_auto_navigation_to_exit()
         if not direct_path_result['success']:
-            self.add_message("❌ 无法重新计算到出口的路径，策略终止")
             self.greedy_pickup_active = False
             return
         

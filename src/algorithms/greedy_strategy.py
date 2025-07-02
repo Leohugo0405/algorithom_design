@@ -27,7 +27,7 @@ class GreedyStrategy:
     
     def get_visible_area(self, player_pos: Tuple[int, int]) -> List[Tuple[int, int]]:
         """
-        获取玩家视野范围内的所有位置
+        获取玩家视野范围内的所有位置（以玩家为中心的正方形区域）
         
         Args:
             player_pos: 玩家当前位置
@@ -38,13 +38,16 @@ class GreedyStrategy:
         x, y = player_pos
         visible_positions = []
         
-        # 计算视野范围
-        for i in range(max(0, x - self.vision_range), 
-                      min(self.size, x + self.vision_range + 1)):
-            for j in range(max(0, y - self.vision_range), 
-                          min(self.size, y + self.vision_range + 1)):
-                # 检查是否在视野范围内（使用曼哈顿距离）
-                if abs(i - x) + abs(j - y) <= self.vision_range:
+        # 计算视野范围 - 使用切比雪夫距离确保正方形视野
+        # vision_range=1表示3x3区域，vision_range=2表示5x5区域
+        vision_radius = self.vision_range // 2  # 将范围转换为半径
+        
+        for i in range(max(0, x - vision_radius), 
+                      min(self.size, x + vision_radius + 1)):
+            for j in range(max(0, y - vision_radius), 
+                          min(self.size, y + vision_radius + 1)):
+                # 使用切比雪夫距离（最大值距离）确保正方形视野
+                if max(abs(i - x), abs(j - y)) <= vision_radius:
                     visible_positions.append((i, j))
         
         return visible_positions
