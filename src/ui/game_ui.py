@@ -6,7 +6,7 @@
 """
 
 import pygame
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 from src.config import Config
 from src.game_engine import GameEngine
 from src.ui.lock_ui import LockUI
@@ -73,6 +73,13 @@ class GameUI:
         self.ai_navigation_active = False
         self.ai_navigation_timer = 0
         self.ai_navigation_delay = 300  # 每步间隔毫秒数
+        
+        # 贪心拾取策略相关
+        self.greedy_pickup_active = False
+        self.greedy_direct_path = []  # 直接路径
+        self.greedy_path_index = 0  # 当前路径索引
+        self.greedy_detour_path = []  # 绕行路径
+        self.greedy_return_position = None  # 返回位置
         
         # 初始化pygame
         self._initialize_pygame()
@@ -259,6 +266,11 @@ class GameUI:
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 self._handle_mouse_click(event.pos)
+                
+            elif event.type == pygame.USEREVENT + 2:
+                # 贪心拾取策略定时器事件
+                if self.greedy_pickup_active:
+                    self._execute_greedy_pickup_step()
             else:
                 pass
 
@@ -367,10 +379,9 @@ class GameUI:
             self.show_algorithm_info = not self.show_algorithm_info
 
         elif key == pygame.K_a:
-            # 切换自动拾取功能
+            # 启动贪心算法实时资源拾取策略
             if not self.paused and not self.game_completed:
-                toggle_result = self.game_engine.toggle_auto_pickup()
-                self.add_message(toggle_result['message'])
+                self._start_greedy_pickup_strategy()
 
         elif key == pygame.K_x:
             # 执行最优路径自动导航
@@ -2076,3 +2087,239 @@ class GameUI:
             self.messages = self.messages[-20:]
         
         print(f"[游戏消息] {message}")  # 同时输出到控制台
+    
+    def _start_greedy_pickup_strategy(self):
+        """
+        启动贪心算法实时资源拾取策略
+        玩家按照直接路径走，在路径上的每个点进行贪心，如果周围有金币则拾取金币后返回直接路径
+        """
+        if not self.game_started or self.game_completed:
+            self.add_message("游戏未开始或已结束")
+            return
+        
+        # 计算从当前位置到出口的直接路径
+        direct_path_result = self.game_engine.get_auto_navigation_to_exit()
+        if not direct_path_result['success']:
+            self.add_message("无法计算到出口的直接路径")
+            return
+        
+        # 启动贪心拾取策略
+        self.greedy_pickup_active = True
+        self.greedy_direct_path = direct_path_result['steps']
+        self.greedy_path_index = 0
+        self.greedy_detour_path = []  # 当前绕行路径
+        self.greedy_return_position = None  # 需要返回的直接路径位置
+        
+        self.add_message("🎯 启动贪心算法实时资源拾取策略")
+        self.add_message(f"📍 直接路径长度: {len(self.greedy_direct_path)}步")
+        
+        # 设置定时器开始执行策略
+        pygame.time.set_timer(pygame.USEREVENT + 2, 200)  # 200ms后开始执行
+    
+    def _execute_greedy_pickup_step(self):
+        """
+        执行一步贪心拾取策略
+        """
+        if not hasattr(self, 'greedy_pickup_active') or not self.greedy_pickup_active:
+            return
+        
+        # 如果正在绕行拾取资源
+        if self.greedy_detour_path:
+            self._execute_detour_step()
+            return
+        
+        # 每次都优先检查当前位置周围是否有金币
+        nearby_gold = self._find_nearby_gold()
+        
+        if nearby_gold:
+            # 找到金币，计算绕行路径
+            self.add_message(f"🔍 检测到金币 (距离: {nearby_gold['distance']}步, 价值: {nearby_gold['value']})")
+            self._start_detour_to_gold(nearby_gold)
+        else:
+            # 没有金币，继续沿直接路径前进
+            self._continue_direct_path()
+    
+    def _find_nearby_gold(self) -> Optional[Dict]:
+        """
+        查找当前位置周围的金币（使用贪心策略选择最优金币）
+        
+        Returns:
+            Optional[Dict]: 最优金币信息，如果没有金币则返回None
+        """
+        if not self.game_engine.greedy_strategy:
+            # 如果没有贪心策略实例，创建一个
+            from ..algorithms.greedy_strategy import GreedyStrategy
+            self.game_engine.greedy_strategy = GreedyStrategy(self.game_engine.maze)
+        
+        # 获取视野内的所有资源
+        resources = self.game_engine.greedy_strategy.get_resources_in_vision(self.game_engine.player_pos)
+        
+        # 过滤出金币
+        gold_resources = [r for r in resources if r['type'] == Config.GOLD]
+        
+        if not gold_resources:
+            return None
+        
+        # 按性价比排序，选择最优金币
+        gold_resources.sort(key=lambda x: x['cost_benefit'], reverse=True)
+        best_gold = gold_resources[0]
+        
+        # 添加调试信息
+        if len(gold_resources) > 1:
+            self.add_message(f"📊 视野内发现{len(gold_resources)}个金币，选择最优 (性价比: {best_gold['cost_benefit']:.2f})")
+        
+        return best_gold
+    
+    def _start_detour_to_gold(self, gold_info: Dict):
+        """
+        开始绕行到金币位置
+        
+        Args:
+            gold_info: 金币信息
+        """
+        # 记录当前在直接路径上的位置，用于后续返回
+        self.greedy_return_position = self.game_engine.player_pos
+        
+        # 计算到金币的路径
+        if not self.game_engine.greedy_strategy:
+            from ..algorithms.greedy_strategy import GreedyStrategy
+            self.game_engine.greedy_strategy = GreedyStrategy(self.game_engine.maze)
+        
+        path_to_gold = self.game_engine.greedy_strategy.find_path_to_resource(
+            self.game_engine.player_pos, gold_info['position']
+        )
+        
+        if path_to_gold and len(path_to_gold) > 1:
+            # 设置绕行路径（排除起点）
+            self.greedy_detour_path = path_to_gold[1:]
+            self.add_message(f"💰 发现金币，开始绕行拾取 (距离: {gold_info['distance']}步)")
+        else:
+            self.add_message("⚠️ 无法到达附近的金币")
+            self._continue_direct_path()
+    
+    def _execute_detour_step(self):
+        """
+        执行绕行步骤
+        """
+        if not self.greedy_detour_path:
+            # 绕行完成，返回直接路径
+            self._return_to_direct_path()
+            return
+        
+        # 执行下一步绕行移动
+        next_pos = self.greedy_detour_path[0]
+        self.greedy_detour_path = self.greedy_detour_path[1:]
+        
+        # 计算移动方向
+        direction = self._get_direction_to_position(next_pos)
+        
+        if direction:
+            # 执行移动
+            result = self.game_engine.move_player(direction)
+            if result['success']:
+                # 检查是否拾取了金币
+                if self.game_engine.maze[next_pos[0]][next_pos[1]] == Config.GOLD:
+                    self.add_message("✨ 成功拾取金币！")
+                    # 清除金币
+                    self.game_engine.maze[next_pos[0]][next_pos[1]] = Config.PATH
+                
+                # 继续执行下一步
+                pygame.time.set_timer(pygame.USEREVENT + 2, 200)  # 200ms后执行下一步
+            else:
+                self.add_message("❌ 绕行移动失败，返回直接路径")
+                self._return_to_direct_path()
+        else:
+            self.add_message("❌ 无法计算绕行方向，返回直接路径")
+            self._return_to_direct_path()
+    
+    def _return_to_direct_path(self):
+        """
+        返回直接路径
+        """
+        if self.greedy_return_position:
+            # 计算返回直接路径的路径
+            if not self.game_engine.greedy_strategy:
+                from ..algorithms.greedy_strategy import GreedyStrategy
+                self.game_engine.greedy_strategy = GreedyStrategy(self.game_engine.maze)
+            
+            return_path = self.game_engine.greedy_strategy.find_path_to_resource(
+                self.game_engine.player_pos, self.greedy_return_position
+            )
+            
+            if return_path and len(return_path) > 1:
+                # 设置返回路径
+                self.greedy_detour_path = return_path[1:]
+                self.add_message("🔄 返回直接路径")
+                self.greedy_return_position = None
+            else:
+                # 无法返回，继续直接路径
+                self._continue_direct_path()
+        else:
+            # 继续直接路径
+            self._continue_direct_path()
+    
+    def _continue_direct_path(self):
+        """
+        继续沿直接路径前进
+        """
+        # 在移动前再次检查是否有金币（确保优先级）
+        nearby_gold = self._find_nearby_gold()
+        if nearby_gold:
+            self.add_message(f"🎯 路径中发现金币，优先拾取 (距离: {nearby_gold['distance']}步)")
+            self._start_detour_to_gold(nearby_gold)
+            return
+        
+        # 重新计算从当前位置到出口的路径
+        direct_path_result = self.game_engine.get_auto_navigation_to_exit()
+        if not direct_path_result['success']:
+            self.add_message("❌ 无法重新计算到出口的路径，策略终止")
+            self.greedy_pickup_active = False
+            return
+        
+        # 更新直接路径
+        self.greedy_direct_path = direct_path_result['steps']
+        self.greedy_path_index = 0
+        
+        # 检查是否已到达出口
+        if not self.greedy_direct_path:
+            self.greedy_pickup_active = False
+            self.add_message("🎉 贪心拾取策略完成！已到达出口")
+            return
+        
+        # 执行下一步直接路径移动
+        direction = self.greedy_direct_path[self.greedy_path_index]
+        self.greedy_path_index += 1
+        
+        result = self.game_engine.move_player(direction)
+        if result['success']:
+            # 移动成功后，继续执行下一步
+            pygame.time.set_timer(pygame.USEREVENT + 2, 200)  # 200ms后执行下一步
+        else:
+            self.add_message("❌ 直接路径移动失败，重新计算路径")
+            # 不终止策略，而是在下次执行时重新计算路径
+            pygame.time.set_timer(pygame.USEREVENT + 2, 200)  # 200ms后重新尝试
+    
+    def _get_direction_to_position(self, target_pos: Tuple[int, int]) -> Optional[str]:
+        """
+        计算到达目标位置的移动方向
+        
+        Args:
+            target_pos: 目标位置
+        
+        Returns:
+            Optional[str]: 移动方向，如果无法计算则返回None
+        """
+        current_pos = self.game_engine.player_pos
+        dx = target_pos[0] - current_pos[0]
+        dy = target_pos[1] - current_pos[1]
+        
+        if dx > 0:
+            return 'down'
+        elif dx < 0:
+            return 'up'
+        elif dy > 0:
+            return 'right'
+        elif dy < 0:
+            return 'left'
+        else:
+            return None

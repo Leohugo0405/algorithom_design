@@ -1321,14 +1321,17 @@ class GameEngine:
             }
         
         # 使用A*算法找到最短路径
-        path = self.resource_path_planner._a_star_path(self.player_pos, self.exit_pos)
+        path_string = self.resource_path_planner._a_star_path(self.player_pos, self.exit_pos)
         
-        if not path:
+        if not path_string:
             return {
                 'success': False,
                 'message': '无法找到到达出口的路径',
                 'steps': []
             }
+        
+        # 将字符串路径转换为坐标路径
+        path = self.resource_path_planner._convert_string_path_to_coordinates(path_string, self.player_pos)
         
         # 获取导航步骤
         steps = self.resource_path_planner.get_auto_navigation_steps(path, self.player_pos)
@@ -1374,14 +1377,17 @@ class GameEngine:
                                    key=lambda r: r['value'])
         
         target_pos = highest_value_resource['position']
-        path = self.resource_path_planner._a_star_path(self.player_pos, target_pos)
+        path_string = self.resource_path_planner._a_star_path(self.player_pos, target_pos)
         
-        if not path:
+        if not path_string:
             return {
                 'success': False,
                 'message': f'无法到达资源位置 {target_pos}',
                 'steps': []
             }
+        
+        # 将字符串路径转换为坐标路径
+        path = self.resource_path_planner._convert_string_path_to_coordinates(path_string, self.player_pos)
         
         steps = self.resource_path_planner.get_auto_navigation_steps(path, self.player_pos)
         

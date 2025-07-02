@@ -244,9 +244,9 @@ class MultiMonsterBattleUI:
             self.title_font = pygame.font.Font('font/msyh.ttc', 24)
             
             # emoji字体
-            self.emoji_font = pygame.font.Font('font/NotoColorEmoji.ttf', 20)
-            self.emoji_small_font = pygame.font.Font('font/NotoColorEmoji.ttf', 14)
-            self.emoji_title_font = pygame.font.Font('font/NotoColorEmoji.ttf', 24)
+            self.emoji_font = pygame.font.Font('font/seguiemj.ttf', 20)
+            self.emoji_small_font = pygame.font.Font('font/seguiemj.ttf', 14)
+            self.emoji_title_font = pygame.font.Font('font/seguiemj.ttf', 24)
         except Exception as e:
             print(f"字体加载失败: {e}")
             # 备用字体
