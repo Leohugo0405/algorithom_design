@@ -716,8 +716,8 @@ class GameEngine:
             monster_config = Config.MONSTER_TYPES[monster_type].copy()
             monster_configs.append(monster_config)
         
-        # 创建多怪物战斗实例
-        self.active_multi_battle = MultiMonsterBattle(monster_configs)
+        # 创建多怪物战斗实例，传递当前玩家资源值
+        self.active_multi_battle = MultiMonsterBattle(monster_configs, self.player_resources)
         self.battles_fought += 1
         
         return {

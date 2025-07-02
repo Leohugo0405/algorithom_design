@@ -45,15 +45,16 @@ class MultiMonsterBattle:
     多怪物战斗管理器
     """
     
-    def __init__(self, monster_configs: List[Dict]):
+    def __init__(self, monster_configs: List[Dict], player_resources: int = 100):
         """
         初始化多怪物战斗（移除玩家血量）
         
         Args:
             monster_configs: 怪物配置列表
+            player_resources: 玩家当前资源值
         """
         self.monsters: List[Monster] = []
-        self.player_resources = 100
+        self.player_resources = player_resources
         self.skill_cooldowns = {skill: 0 for skill in Config.SKILLS.keys()}
         self.battle_log = []
         self.turn_count = 0
@@ -225,7 +226,8 @@ class MultiMonsterBattle:
         alive_monsters = self.get_alive_monsters()
         if not alive_monsters:
             # 胜利
-            reward = len(self.monsters) * 20  # 每个怪物20资源奖励
+            # reward = len(self.monsters) * 20  # 每个怪物20资源奖励
+            reward = 0
             return {
                 'status': 'victory',
                 'reward': reward,

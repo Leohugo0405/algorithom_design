@@ -615,13 +615,17 @@ class GameUI:
         scenario = interaction.get('scenario', 'medium')
         self.add_message(f"进入多怪物战斗界面... {interaction.get('message', '')}")
         
-        # 创建并运行多怪物战斗UI
-        battle_ui = MultiMonsterBattleUI(scenario)
+        # 创建并运行多怪物战斗UI，传递当前玩家资源值
+        battle_ui = MultiMonsterBattleUI(scenario, self.game_engine.player_resources)
         battle_result = battle_ui.run()
         
         # 处理战斗结果
         if not battle_result:
             return
+
+        # 同步战斗后的资源值回游戏引擎
+        if hasattr(battle_ui.battle, 'player_resources'):
+            self.game_engine.player_resources = battle_ui.battle.player_resources
 
         status = battle_result.get('status')
         message = battle_result.get('message', '战斗已结束。')

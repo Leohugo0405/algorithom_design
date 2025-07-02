@@ -28,14 +28,16 @@ class MultiMonsterBattleUI:
     多怪物战斗用户界面类
     """
     
-    def __init__(self, scenario_name: str = 'medium'):
+    def __init__(self, scenario_name: str = 'medium', player_resources: int = 100):
         """
         初始化多怪物战斗UI
         
         Args:
             scenario_name: 战斗场景名称
+            player_resources: 玩家当前资源值
         """
         self.scenario_name = scenario_name
+        self.player_resources = player_resources
         
         # 创建怪物配置 - 动态适应当前配置
         self._initialize_battle_from_current_config()
@@ -72,7 +74,7 @@ class MultiMonsterBattleUI:
                 self.scenario = {'name': '默认战斗', 'monsters': []}
                 monster_configs = [{'name': '默认敌人', 'hp': 50, 'attack': 10, 'defense': 2}]
         
-        self.battle = MultiMonsterBattle(monster_configs)
+        self.battle = MultiMonsterBattle(monster_configs, self.player_resources)
         
         # pygame组件
         self.screen = None
@@ -92,11 +94,13 @@ class MultiMonsterBattleUI:
         self.strategy_stats = None
         self.monster_targets = {}
         
-        # 滚动状态 - 分别为技能区域和怪物区域
+        # 滚动状态 - 分别为技能区域、怪物区域和玩家区域
         self.skill_scroll_offset = 0
         self.skill_max_scroll_offset = 0
         self.monster_scroll_offset = 0
         self.monster_max_scroll_offset = 0
+        self.player_scroll_offset = 0
+        self.player_max_scroll_offset = 0
         
         # 策略结果滚动状态（保持原有功能）
         self.scroll_offset = 0
@@ -120,6 +124,16 @@ class MultiMonsterBattleUI:
         self.confirm_button = pygame.Rect(600, 670, 100, 30)
         self.cancel_button = pygame.Rect(720, 670, 100, 30)
         self.strategy_button = pygame.Rect(50, 680, 150, 30)  # 策略优化按钮
+        self.auto_battle_button = pygame.Rect(220, 680, 150, 30)  # 自动战斗按钮
+        
+        # 自动战斗相关状态
+        self.auto_battle_active = False
+        self.auto_battle_sequence = []
+        self.auto_battle_targets = {}
+        self.auto_battle_step = 0
+        self.auto_battle_timer = 0
+        self.auto_battle_delay = 1500  # 每步延迟1.5秒
+        self.auto_battle_last_time = 0
         
         self._initialize_pygame()
     
@@ -333,6 +347,13 @@ class MultiMonsterBattleUI:
             if self.strategy_button.collidepoint(pos):
                 self._show_strategy_optimization()
             
+            # 检查自动战斗按钮
+            if self.auto_battle_button.collidepoint(pos):
+                if self.auto_battle_active:
+                    self._stop_auto_battle()
+                else:
+                    self._start_auto_battle()
+            
 
     
     def _execute_skill(self, skill_name: str, target_id: Optional[int] = None):
@@ -438,6 +459,9 @@ class MultiMonsterBattleUI:
         elif self.monsters_area.collidepoint(mouse_pos):
             # 怪物区域滚动
             self.monster_scroll_offset = max(0, self.monster_scroll_offset - 30)
+        elif self.player_area.collidepoint(mouse_pos):
+            # 玩家区域滚动
+            self.player_scroll_offset = max(0, self.player_scroll_offset - 30)
     
     def _handle_scroll_down(self, mouse_pos: Tuple[int, int]):
         """处理向下滚动"""
@@ -449,6 +473,9 @@ class MultiMonsterBattleUI:
         elif self.monsters_area.collidepoint(mouse_pos):
             # 怪物区域滚动
             self.monster_scroll_offset = min(self.monster_max_scroll_offset, self.monster_scroll_offset + 30)
+        elif self.player_area.collidepoint(mouse_pos):
+            # 玩家区域滚动
+            self.player_scroll_offset = min(self.player_max_scroll_offset, self.player_scroll_offset + 30)
     
     def _find_multi_target_strategy(self, monsters_info: List[Dict], player_resources: int) -> Dict:
         """寻找Boss战斗策略"""
@@ -562,9 +589,105 @@ class MultiMonsterBattleUI:
         
         return best_skill
     
+    def _start_auto_battle(self):
+        """启动自动战斗"""
+        if not self.battle.battle_active or self.auto_battle_active:
+            return
+        
+        # 获取最优策略
+        battle_state = self.battle.get_battle_state()
+        alive_monsters = [m for m in battle_state['monsters'] if m['alive']]
+        if not alive_monsters:
+            return
+        
+        # 准备怪物信息
+        monsters_info = []
+        for monster in alive_monsters:
+            monsters_info.append({
+                'id': monster['id'],
+                'name': monster['name'],
+                'hp': monster['current_hp'],
+                'max_hp': monster['max_hp']
+            })
+        
+        player_resources = battle_state['player_resources']
+        
+        # 获取最优策略
+        strategy_result = self._find_multi_target_strategy(monsters_info, player_resources)
+        
+        if strategy_result['sequence']:
+            self.auto_battle_active = True
+            self.auto_battle_sequence = strategy_result['sequence']
+            self.auto_battle_targets = strategy_result.get('targets', {})
+            self.auto_battle_step = 0
+            self.auto_battle_last_time = pygame.time.get_ticks()
+            
+            # 关闭其他界面
+            self.show_target_selection = False
+            self.show_strategy_result = False
+            self.selected_skill = None
+            self.selected_target = None
+    
+    def _stop_auto_battle(self):
+        """停止自动战斗"""
+        self.auto_battle_active = False
+        self.auto_battle_sequence = []
+        self.auto_battle_targets = {}
+        self.auto_battle_step = 0
+        self.auto_battle_timer = 0
+    
     def _update(self):
         """更新游戏状态"""
-        pass
+        if self.auto_battle_active:
+            self._update_auto_battle()
+    
+    def _update_auto_battle(self):
+        """更新自动战斗状态"""
+        current_time = pygame.time.get_ticks()
+        
+        # 检查是否到了执行下一步的时间
+        if current_time - self.auto_battle_last_time >= self.auto_battle_delay:
+            if self.auto_battle_step < len(self.auto_battle_sequence):
+                # 执行当前步骤
+                skill_name = self.auto_battle_sequence[self.auto_battle_step]
+                target_id = None
+                
+                # 获取目标ID
+                if self.auto_battle_step in self.auto_battle_targets:
+                    target_info = self.auto_battle_targets[self.auto_battle_step]
+                    target_id = target_info.get('monster_id')
+                    if target_id == -1:  # 非攻击技能
+                        target_id = None
+                
+                # 执行技能
+                result = self.battle.execute_player_turn(skill_name, target_id)
+                
+                if result['success']:
+                    # 每回合资源值减一
+                    current_state = self.battle.get_battle_state()
+                    if current_state['player_resources'] > 0:
+                        # 直接修改战斗系统中的玩家资源
+                        self.battle.player_resources = max(0, self.battle.player_resources - 1)
+                    
+                    # 检查战斗状态
+                    battle_result = self.battle.get_battle_result()
+                    if battle_result['status'] != 'ongoing':
+                        self.battle_result = battle_result
+                        self._stop_auto_battle()
+                        # 延迟2秒后关闭
+                        pygame.time.wait(2000)
+                        self.running = False
+                        return
+                    
+                    # 进入下一步
+                    self.auto_battle_step += 1
+                    self.auto_battle_last_time = current_time
+                else:
+                    # 执行失败，停止自动战斗
+                    self._stop_auto_battle()
+            else:
+                # 序列执行完毕，停止自动战斗
+                self._stop_auto_battle()
     
     def _render(self):
         """渲染界面"""
@@ -588,6 +711,9 @@ class MultiMonsterBattleUI:
         
         # 渲染策略优化按钮
         self._render_strategy_button()
+        
+        # 渲染自动战斗按钮
+        self._render_auto_battle_button()
         
         if self.show_strategy_result:
             self._render_strategy_result()
@@ -752,45 +878,94 @@ class MultiMonsterBattleUI:
         title_text_rect = player_title.get_rect(center=(title_rect.centerx, title_rect.centery))
         self.screen.blit(player_title, title_text_rect)
         
+        # 创建可滚动内容区域
+        content_area = pygame.Rect(self.player_area.x, self.player_area.y + 25, self.player_area.width - 15, self.player_area.height - 25)
+        
+        # 计算总内容高度
+        base_content_height = 50  # 基础信息高度
+        auto_battle_height = 0
+        if self.auto_battle_active:
+            auto_battle_height = 105  # 自动战斗信息高度
+        total_content_height = base_content_height + auto_battle_height
+        
+        # 更新滚动范围
+        self.player_max_scroll_offset = max(0, total_content_height - content_area.height)
+        self.player_scroll_offset = min(self.player_scroll_offset, self.player_max_scroll_offset)
+        
+        # 设置裁剪区域
+        old_clip = self.screen.get_clip()
+        self.screen.set_clip(content_area)
+        
+        # 计算滚动偏移后的Y位置
+        y_offset = 35 - self.player_scroll_offset
+        
         # 资源信息
         resource_text = f"💰 资源: {battle_state['player_resources']}"
         resource_surface = self._render_mixed_text(resource_text, 'small', Config.COLORS['GOLD'])
-        self.screen.blit(resource_surface, (self.player_area.x + 15, self.player_area.y + 35))
+        self.screen.blit(resource_surface, (self.player_area.x + 15, self.player_area.y + y_offset))
         
         turn_text = f"🔄 回合: {battle_state['turn_count']}"
         turn_surface = self._render_mixed_text(turn_text, 'small', Config.COLORS['INFO'])
-        self.screen.blit(turn_surface, (self.player_area.x + 15, self.player_area.y + 55))
+        self.screen.blit(turn_surface, (self.player_area.x + 15, self.player_area.y + y_offset + 20))
         
-        # 现代化资源条
-        resource_bar_rect = pygame.Rect(self.player_area.x + 15, self.player_area.y + 80, 200, 18)
-        # 资源条阴影
-        bar_shadow = pygame.Rect(resource_bar_rect.x + 2, resource_bar_rect.y + 2, resource_bar_rect.width, resource_bar_rect.height)
-        pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], bar_shadow)
+
         
-        # 资源条背景
-        pygame.draw.rect(self.screen, Config.COLORS['DARK_GRAY'], resource_bar_rect)
+        # 自动战斗状态信息
+        if self.auto_battle_active:
+            y_pos = self.player_area.y + y_offset + 45
+            
+            # 自动战斗标题
+            auto_title = self._render_mixed_text("⚡ 自动战斗中...", 'small', Config.COLORS['ACCENT'])
+            self.screen.blit(auto_title, (self.player_area.x + 15, y_pos))
+            y_pos += 25
+            
+            # 当前步骤信息
+            if self.auto_battle_sequence and self.auto_battle_step < len(self.auto_battle_sequence):
+                current_skill = self.auto_battle_sequence[self.auto_battle_step]
+                current_target = self.auto_battle_targets[self.auto_battle_step] if self.auto_battle_step < len(self.auto_battle_targets) else None
+                
+                # 当前技能
+                skill_text = f"🎯 技能: {current_skill}"
+                skill_surface = self._render_mixed_text(skill_text, 'small', Config.COLORS['INFO'])
+                self.screen.blit(skill_surface, (self.player_area.x + 15, y_pos))
+                y_pos += 20
+                
+                # 目标信息
+                if current_target is not None:
+                    target_text = f"👹 目标: 怪物 #{current_target['monster_id']} ({current_target['monster_name']})"
+                    target_surface = self._render_mixed_text(target_text, 'small', Config.COLORS['WARNING'])
+                    self.screen.blit(target_surface, (self.player_area.x + 15, y_pos))
+                    y_pos += 20
+                
+                # 进度信息
+                progress_text = f"📊 进度: {self.auto_battle_step + 1}/{len(self.auto_battle_sequence)}"
+                progress_surface = self._render_mixed_text(progress_text, 'small', Config.COLORS['SUCCESS'])
+                self.screen.blit(progress_surface, (self.player_area.x + 15, y_pos))
+                y_pos += 20
+                
+                # 资源消耗提示
+                cost_text = "💰 每回合消耗: -1 资源"
+                cost_surface = self._render_mixed_text(cost_text, 'small', Config.COLORS['DANGER'])
+                self.screen.blit(cost_surface, (self.player_area.x + 15, y_pos))
         
-        # 资源条填充
-        resource_percentage = min(1.0, battle_state['player_resources'] / 100.0)
-        resource_fill_width = int(resource_bar_rect.width * resource_percentage)
-        if resource_fill_width > 0:
-            resource_fill_rect = pygame.Rect(resource_bar_rect.x, resource_bar_rect.y, resource_fill_width, resource_bar_rect.height)
-            # 渐变效果
-            if resource_percentage > 0.6:
-                fill_color = Config.COLORS['SUCCESS']
-            elif resource_percentage > 0.3:
-                fill_color = Config.COLORS['WARNING']
-            else:
-                fill_color = Config.COLORS['DANGER']
-            pygame.draw.rect(self.screen, fill_color, resource_fill_rect)
+        # 恢复裁剪区域
+        self.screen.set_clip(old_clip)
         
-        pygame.draw.rect(self.screen, Config.COLORS['WHITE'], resource_bar_rect, 2)
-        
-        # 资源百分比文字
-        percentage_text = f"{int(resource_percentage * 100)}%"
-        percentage_surface = self._render_mixed_text(percentage_text, 'small', Config.COLORS['WHITE'])
-        percentage_rect = percentage_surface.get_rect(center=resource_bar_rect.center)
-        self.screen.blit(percentage_surface, percentage_rect)
+        # 绘制滚动条（如果需要）
+        if self.player_max_scroll_offset > 0:
+            scrollbar_x = self.player_area.x + self.player_area.width - 12
+            scrollbar_y = self.player_area.y + 25
+            scrollbar_height = self.player_area.height - 25
+            
+            # 滚动条背景
+            scrollbar_bg = pygame.Rect(scrollbar_x, scrollbar_y, 10, scrollbar_height)
+            pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], scrollbar_bg)
+            
+            # 滚动条滑块
+            thumb_height = max(20, int(scrollbar_height * content_area.height / total_content_height))
+            thumb_y = scrollbar_y + int((scrollbar_height - thumb_height) * self.player_scroll_offset / self.player_max_scroll_offset)
+            thumb_rect = pygame.Rect(scrollbar_x + 1, thumb_y, 8, thumb_height)
+            pygame.draw.rect(self.screen, Config.COLORS['PRIMARY'], thumb_rect)
     
     def _render_monsters_area(self):
         """渲染怪物区域"""
@@ -1005,7 +1180,7 @@ class MultiMonsterBattleUI:
     
     def _render_strategy_button(self):
         """渲染策略优化按钮"""
-        if not self.battle.battle_active or self.show_target_selection or self.show_strategy_result:
+        if not self.battle.battle_active or self.show_target_selection or self.show_strategy_result or self.auto_battle_active:
             return
         
         # 按钮阴影
@@ -1021,6 +1196,43 @@ class MultiMonsterBattleUI:
         button_text = self._render_mixed_text("🧠 BOSS战策略优化", 'small', Config.COLORS['WHITE'])
         text_rect = button_text.get_rect(center=self.strategy_button.center)
         self.screen.blit(button_text, text_rect)
+    
+    def _render_auto_battle_button(self):
+        """渲染自动战斗按钮"""
+        if not self.battle.battle_active or self.show_target_selection or self.show_strategy_result:
+            return
+        
+        # 按钮阴影
+        shadow_button = pygame.Rect(self.auto_battle_button.x + 2, self.auto_battle_button.y + 2, 
+                                   self.auto_battle_button.width, self.auto_battle_button.height)
+        pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], shadow_button)
+        
+        # 根据自动战斗状态选择颜色
+        if self.auto_battle_active:
+            button_color = Config.COLORS['DANGER']
+            border_color = Config.COLORS['DANGER']
+            button_text_content = "⏹️ 停止自动战斗"
+        else:
+            button_color = Config.COLORS['SUCCESS']
+            border_color = Config.COLORS['SUCCESS']
+            button_text_content = "⚡ 自动战斗"
+        
+        # 按钮背景
+        pygame.draw.rect(self.screen, button_color, self.auto_battle_button)
+        pygame.draw.rect(self.screen, border_color, self.auto_battle_button, 2)
+        
+        # 按钮文字
+        button_text = self._render_mixed_text(button_text_content, 'small', Config.COLORS['WHITE'])
+        text_rect = button_text.get_rect(center=self.auto_battle_button.center)
+        self.screen.blit(button_text, text_rect)
+        
+        # 如果正在自动战斗，显示进度信息
+        if self.auto_battle_active and self.auto_battle_sequence:
+            progress_text = f"步骤 {self.auto_battle_step + 1}/{len(self.auto_battle_sequence)}"
+            progress_surface = self._render_mixed_text(progress_text, 'small', Config.COLORS['YELLOW'])
+            progress_rect = pygame.Rect(self.auto_battle_button.x, self.auto_battle_button.y - 20, 
+                                      self.auto_battle_button.width, 15)
+            self.screen.blit(progress_surface, (progress_rect.x + 5, progress_rect.y))
     
     def _render_strategy_result(self):
         """渲染策略优化结果"""
