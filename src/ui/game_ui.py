@@ -6,9 +6,7 @@
 """
 
 import pygame
-import sys
-from typing import Dict, List, Tuple, Optional
-from src import config
+from typing import Dict, List, Tuple
 from src.config import Config
 from src.game_engine import GameEngine
 from src.ui.lock_ui import LockUI
@@ -111,16 +109,16 @@ class GameUI:
             self.small_font = pygame.font.SysFont('Arial', 12)
             self.emoji_font = pygame.font.SysFont('Arial', 36)
             self.emoji_small_font = pygame.font.SysFont('Arial', 24)
-    
+
     def _render_mixed_text(self, text, font_size='normal', color=(255, 255, 255)):
         """
         渲染包含文字和emoji的混合文本
-        
+
         Args:
             text: 要渲染的文本
             font_size: 字体大小 ('normal', 'small')
             color: 文字颜色
-        
+
         Returns:
             pygame.Surface: 渲染后的文本表面
         """
@@ -132,7 +130,7 @@ class GameUI:
             else:
                 font_height = self.font.get_height()
             return pygame.Surface((1, font_height), pygame.SRCALPHA)
-        
+
         # 选择字体
         if font_size == 'small':
             text_font = self.small_font
@@ -140,12 +138,12 @@ class GameUI:
         else:
             text_font = self.font
             emoji_font = self.emoji_font
-        
+
         # 分析文本，分离emoji和普通文字
         segments = []
         current_segment = ""
         is_emoji = False
-        
+
         for char in text:
             # 判断是否为emoji (简化版本，检查Unicode范围)
             char_is_emoji = (
@@ -158,7 +156,7 @@ class GameUI:
                 0xFE00 <= ord(char) <= 0xFE0F or   # 变体选择器
                 0x1F900 <= ord(char) <= 0x1F9FF     # 补充符号
             )
-            
+
             if char_is_emoji != is_emoji:
                 # 类型改变，保存当前段落
                 if current_segment:
@@ -167,11 +165,11 @@ class GameUI:
                 is_emoji = char_is_emoji
             else:
                 current_segment += char
-        
+
         # 添加最后一个段落
         if current_segment:
             segments.append((current_segment, is_emoji))
-        
+
         # 如果只有一种类型的文本，直接渲染
         if len(segments) == 1:
             segment_text, is_emoji_segment = segments[0]
@@ -180,12 +178,12 @@ class GameUI:
                 return pygame.Surface((1, text_font.get_height()), pygame.SRCALPHA)
             font = emoji_font if is_emoji_segment else text_font
             return font.render(segment_text, True, color)
-        
+
         # 渲染各个段落
         rendered_segments = []
         total_width = 0
         max_height = 0
-        
+
         for segment_text, is_emoji_segment in segments:
             # 跳过空的段落或不可见字符（如变体选择器）
             if not segment_text or segment_text.strip() == "" or all(0xFE00 <= ord(c) <= 0xFE0F for c in segment_text):
@@ -195,24 +193,24 @@ class GameUI:
             rendered_segments.append(rendered)
             total_width += rendered.get_width()
             max_height = max(max_height, rendered.get_height())
-        
+
         # 创建组合表面
         if total_width == 0 or max_height == 0:
             # 创建一个最小尺寸的透明表面，避免"Text has zero width"错误
             min_surface = pygame.Surface((1, text_font.get_height()), pygame.SRCALPHA)
             return min_surface
-        
+
         combined_surface = pygame.Surface((total_width, max_height), pygame.SRCALPHA)
-        
+
         # 将各段落绘制到组合表面
         x_offset = 0
         for rendered in rendered_segments:
             y_offset = (max_height - rendered.get_height()) // 2
             combined_surface.blit(rendered, (x_offset, y_offset))
             x_offset += rendered.get_width()
-        
+
         return combined_surface
-    
+
     def run(self):
         """
         运行游戏主循环
@@ -221,12 +219,12 @@ class GameUI:
         while self.running:
             # 处理事件
             self._handle_events()
-            
+
             # 更新可视化导航
             if self.game_started and not self.paused:
                 self._update_visual_navigation()
                 self._update_ai_navigation()
-            
+
             # 如果显示设置界面
             if self.show_settings:
                 self._draw_settings_screen()
@@ -239,15 +237,15 @@ class GameUI:
             # 如果游戏还未开始且不显示设置界面，显示空白屏幕等待初始化
             else:
                 self.screen.fill(Config.COLORS['BLACK'])
-            
+
             # 更新显示
             pygame.display.flip()
-            
+
             # 控制帧率
             self.clock.tick(Config.FPS)
-        
+
         pygame.quit()
-    
+
     def _handle_events(self):
         """
         处理pygame事件
@@ -255,19 +253,19 @@ class GameUI:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
-            
+
             elif event.type == pygame.KEYDOWN:
                 self._handle_keydown(event.key)
-            
+
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 self._handle_mouse_click(event.pos)
             else:
                 pass
-    
+
     def _handle_keydown(self, key):
         """
         处理键盘按下事件
-        
+
         Args:
             key: 按下的键
         """
@@ -301,7 +299,7 @@ class GameUI:
                 self.show_load_json = True
                 self.selected_json_index = 0  # 重置选择索引
             return
-        
+
         elif self.show_load_json:
             # JSON加载界面的按键处理
             if key == pygame.K_ESCAPE:
@@ -313,7 +311,7 @@ class GameUI:
                 if self.available_json_files:
                     selected_file = self.available_json_files[self.selected_json_index]
                     load_result = self.game_engine.load_maze_from_json(selected_file['path'])
-                    
+
                     if load_result['success']:
                         self.add_message("迷宫加载成功！")
                         self.add_message(f"文件: {selected_file['name']}")
@@ -331,14 +329,14 @@ class GameUI:
                 if self.available_json_files and self.selected_json_index < len(self.available_json_files) - 1:
                     self.selected_json_index += 1
             return
-        
+
         if key == pygame.K_ESCAPE:
             self.running = False
-        
+
         elif key == pygame.K_SPACE:
             self.paused = not self.paused
             self.add_message("游戏暂停" if self.paused else "游戏继续")
-        
+
         elif key == pygame.K_r:
             # 重新开始游戏
             self.show_settings = True
@@ -355,65 +353,74 @@ class GameUI:
             if self.show_optimal_path:
                 self._calculate_optimal_path()
             self.add_message("最优路径显示" + ("开启" if self.show_optimal_path else "关闭"))
-        
+
         elif key == pygame.K_s:
             # 切换统计信息显示
             self.show_statistics = not self.show_statistics
-        
+
         elif key == pygame.K_h:
             # 切换控制帮助显示
             self.show_controls = not self.show_controls
-        
+
         elif key == pygame.K_i:
             # 切换算法信息显示
             self.show_algorithm_info = not self.show_algorithm_info
-        
+
         elif key == pygame.K_a:
             # 切换自动拾取功能
             if not self.paused and not self.game_completed:
                 toggle_result = self.game_engine.toggle_auto_pickup()
                 self.add_message(toggle_result['message'])
-        
+
         elif key == pygame.K_x:
             # 执行最优路径自动导航
             if not self.paused and not self.game_completed:
                 self._execute_optimal_path_navigation()
-        
+
         elif key == pygame.K_z:
             # 停止可视化导航
             if not self.paused and not self.game_completed:
                 self._stop_visual_navigation()
-        
+
         elif key == pygame.K_i:
             # 执行智能陷阱权衡路径导航
             if not self.paused and not self.game_completed:
                 self._execute_smart_trap_navigation()
-        
+
         elif key == pygame.K_p:
             # 显示资源路径规划
             self._show_resource_path_planning()
-        
+
         elif key == pygame.K_n:
             # 自动导航到最近资源
             self._auto_navigate_to_nearest_resource()
-        
-        elif key == pygame.K_e:
-            # 自动导航到出口
-            self._auto_navigate_to_exit()
-        
+
         elif key == pygame.K_m:
             # 显示多个路径方案
             self._show_path_alternatives()
-        
+
         elif key == pygame.K_v:
-            # 切换多路径方案显示
-            if self.alternative_paths:
-                self.show_alternative_paths = not self.show_alternative_paths
-                status = "开启" if self.show_alternative_paths else "关闭"
-                self.add_message(f"多路径方案显示已{status}")
+            # 显示AI会走的最优路径
+            if not self.game_started or self.game_completed:
+                self.add_message("游戏未开始或已结束")
+                return
+
+            self.add_message("正在计算AI最优路径...")
+            result = self.game_engine.get_optimal_path()
+
+            if result['success']:
+                self.optimal_path = result['optimal_path']
+                self.show_optimal_path = True
+                path_details = result.get('path_details', {})
+                self.add_message(f"AI最优路径已显示")
+                self.add_message(f"路径长度: {path_details.get('length', len(self.optimal_path))}步")
+                self.add_message(f"总价值: {path_details.get('total_value', 0)}")
+                if path_details.get('net_value') is not None:
+                    self.add_message(f"净价值: {path_details.get('net_value', 0)}")
             else:
-                self.add_message("请先按M键生成路径方案")
-        
+                self.add_message("AI最优路径计算失败")
+                self.add_message(result.get('message', '未知错误'))
+
         elif key == pygame.K_RETURN or key == pygame.K_KP_ENTER:
             # Enter键交互
             if self.game_engine.pending_interaction:
@@ -427,7 +434,7 @@ class GameUI:
                         self._handle_multi_monster_battle(interaction_result)
                 else:
                     self.add_message(interaction_result['message'])
-        
+
         elif not self.paused and not self.game_completed:
             # 手动移动控制
             direction = None
@@ -439,7 +446,7 @@ class GameUI:
                 direction = 'left'
             elif key == pygame.K_RIGHT:
                 direction = 'right'
-            
+
             if direction:
                 prev_pos = self.game_engine.player_pos
                 result = self.game_engine.move_player(direction)
@@ -485,11 +492,11 @@ class GameUI:
         else:
             # 处理未定义的按键，防止程序无响应
             pass
-    
+
     def _handle_mouse_click(self, pos: Tuple[int, int]):
         """
         处理鼠标点击事件
-        
+
         Args:
             pos: 鼠标点击位置
         """
@@ -501,22 +508,22 @@ class GameUI:
             if browse_button_rect.collidepoint(pos):
                 self._show_file_dialog()
                 return
-            
+
             # 检查是否点击了文件列表中的某个文件
             if self.available_json_files:
                 list_start_y = 180
                 item_height = 40
                 visible_items = 10
                 scroll_offset = max(0, self.selected_json_index - visible_items // 2)
-                
+
                 for i in range(visible_items):
                     file_index = scroll_offset + i
                     if file_index >= len(self.available_json_files):
                         break
-                    
+
                     item_y = list_start_y + i * item_height
                     item_rect = pygame.Rect(center_x - 300, item_y, 600, item_height)
-                    
+
                     if item_rect.collidepoint(pos):
                         self.selected_json_index = file_index
                         # 双击加载文件
@@ -528,7 +535,7 @@ class GameUI:
                                 self.show_load_json = False
                                 # 同时加载配置信息（如果文件包含配置）
                                 try:
-                                    from .config import Config
+                                    from ..config import Config
                                     Config.load_from_json(selected_file['path'])
                                     self.add_message("已同时加载文件中的配置信息")
                                 except Exception:
@@ -536,19 +543,19 @@ class GameUI:
                             else:
                                 self.add_message(f"加载失败: {load_result['message']}")
                         self._last_click_time = pygame.time.get_ticks()
-        
+
         # 可以添加其他鼠标交互逻辑，比如点击迷宫格子
-    
+
 
     def _play_trap_animation(self):
-    
+
     #显示陷阱触发动画（例如红色闪烁）
-    
+
         for _ in range(3):
             self.screen.fill(Config.COLORS['RED'])  # 红色闪屏
             pygame.display.flip()
             pygame.time.delay(100)
-            
+
             self._render()  # 恢复正常画面
             pygame.display.flip()
             pygame.time.delay(100)
@@ -565,31 +572,31 @@ class GameUI:
             self.add_message("最优路径计算失败")
 
 
-    
+
     def _handle_lock_encounter(self, interaction: Dict):
         """
         处理Lock遭遇事件
-        
+
         Args:
             interaction: 交互信息
         """
         self.add_message("发现密码锁，进入解谜界面...")
-        
+
         # 创建谜题数据
         lock_data = {
             'puzzle': interaction.get('puzzle'),
             'position': self.game_engine.player_pos
         }
-        
+
         # 检查是否有记住的JSON文件路径
         remembered_json_file = None
         if hasattr(self.game_engine, 'current_json_file_path') and self.game_engine.current_json_file_path:
             remembered_json_file = self.game_engine.current_json_file_path
-        
+
         # 创建并运行解谜界面，自动解谜
         lock_ui = LockUI(self.game_engine, lock_data, remembered_json_file, auto_solve=True)
         puzzle_result = lock_ui.run()
-        
+
         # 处理解谜结果
         if puzzle_result['success']:
             self.add_message("密码锁解开成功！")
@@ -603,7 +610,7 @@ class GameUI:
                 self.game_engine.active_puzzle = None
         else:
             self.add_message("解谜失败或取消")
-        
+
         # 恢复主游戏窗口
         pygame.display.set_mode((Config.WINDOW_WIDTH, Config.WINDOW_HEIGHT))
         pygame.display.set_caption(Config.WINDOW_TITLE)
@@ -611,23 +618,23 @@ class GameUI:
     def _handle_multi_monster_battle(self, interaction: Dict, auto_start_battle: bool = False):
         """
         处理多怪物战斗遭遇事件
-        
+
         Args:
             interaction: 交互信息
             auto_start_battle: 是否自动开始战斗（导航时为True，手动移动时为False）
         """
         from .multi_battle_ui import MultiMonsterBattleUI
-        
+
         scenario = interaction.get('scenario', 'medium')
         if auto_start_battle:
             self.add_message(f"进入多怪物战斗界面，自动开始战斗... {interaction.get('message', '')}")
         else:
             self.add_message(f"进入多怪物战斗界面... {interaction.get('message', '')}")
-        
+
         # 创建并运行多怪物战斗UI，根据参数决定是否自动开始战斗
         battle_ui = MultiMonsterBattleUI(scenario, self.game_engine.player_resources, auto_start_battle=auto_start_battle)
         battle_result = battle_ui.run()
-        
+
         # 处理战斗结果
         if not battle_result:
             return
@@ -649,21 +656,21 @@ class GameUI:
             self.add_message(f"多怪物战斗失败: {message}")
         else:
             self.add_message(f"多怪物战斗结束: {message}")
-        
+
         # 恢复主游戏窗口
         pygame.display.set_mode((Config.WINDOW_WIDTH, Config.WINDOW_HEIGHT))
         pygame.display.set_caption(Config.WINDOW_TITLE)
-    
+
     def _render(self):
         """
         渲染游戏画面
         """
         # 清空屏幕
         self.screen.fill(Config.COLORS['WHITE'])
-        
+
         # 渲染迷宫
         self._render_maze()
-        
+
         # 渲染路径
         if self.show_alternative_paths and self.alternative_paths:
             # 绘制多路径方案
@@ -672,58 +679,58 @@ class GameUI:
             # 绘制传统路径
             if self.show_optimal_path and self.optimal_path:
                 self._render_path(self.optimal_path, Config.COLORS['BLUE'], 2)
-            
+
             if self.show_greedy_path and self.greedy_path:
                 self._render_path(self.greedy_path, Config.COLORS['GREEN'], 2)
-        
+
         # 渲染玩家
         self._render_player()
-        
+
         # 渲染UI面板
         self._render_ui_panels()
-        
+
         # 更新显示
         pygame.display.flip()
-    
+
     def _render_maze(self):
         """
         渲染迷宫
         """
         if not self.game_engine.maze:
             return
-        
+
         maze = self.game_engine.maze
         maze_size = self.game_engine.maze_size
-        
+
         # 计算迷宫渲染区域
         maze_area_width = min(600, Config.WINDOW_WIDTH - 400)
         maze_area_height = min(600, Config.WINDOW_HEIGHT - 100)
         cell_size = min(maze_area_width // maze_size, maze_area_height // maze_size)
-        
+
         start_x = 50
         start_y = 50
-        
+
         for i in range(maze_size):
             for j in range(maze_size):
                 x = start_x + j * cell_size
                 y = start_y + i * cell_size
-                
+
                 cell = maze[i][j]
-                
+
                 # 如果是已解决的谜题，显示为普通路径
                 if cell == Config.LOCKER and (i, j) in self.game_engine.solved_puzzles:
                     cell = Config.PATH
-                
+
                 color = Config.ELEMENT_COLORS.get(cell, Config.COLORS['WHITE'])
-                
+
                 # 绘制阴影效果（对于墙壁和特殊元素）
                 if cell == Config.WALL or cell in [Config.GOLD, Config.BOSS, Config.LOCKER]:
                     shadow_color = Config.COLORS['SHADOW']
                     pygame.draw.rect(self.screen, shadow_color, (x + 2, y + 2, cell_size, cell_size))
-                
+
                 # 绘制格子主体
                 pygame.draw.rect(self.screen, color, (x, y, cell_size, cell_size))
-                
+
                 # 绘制特殊效果
                 if cell == Config.START:
                     # 起点：绿色渐变边框
@@ -751,7 +758,7 @@ class GameUI:
                 else:
                     # 普通格子：细边框
                     pygame.draw.rect(self.screen, Config.COLORS['BORDER'], (x, y, cell_size, cell_size), 1)
-                
+
                 # 绘制元素符号（使用更好的字体和颜色）
                 if cell != Config.WALL and cell != Config.PATH:
                     # 根据元素类型选择合适的文字颜色
@@ -776,15 +783,15 @@ class GameUI:
                     else:
                         text_color = Config.COLORS['WHITE']
                         symbol = cell
-                    
+
                     text_surface = self._render_mixed_text(symbol, 'small', text_color)
                     text_rect = text_surface.get_rect(center=(x + cell_size // 2, y + cell_size // 2))
                     self.screen.blit(text_surface, text_rect)
-    
+
     def _render_path(self, path: List[Tuple[int, int]], color: Tuple[int, int, int], width: int):
         """
         渲染路径
-        
+
         Args:
             path: 路径坐标列表
             color: 路径颜色
@@ -792,31 +799,31 @@ class GameUI:
         """
         if len(path) < 2:
             return
-        
+
         maze_size = self.game_engine.maze_size
         maze_area_width = min(600, Config.WINDOW_WIDTH - 400)
         maze_area_height = min(600, Config.WINDOW_HEIGHT - 100)
         cell_size = min(maze_area_width // maze_size, maze_area_height // maze_size)
-        
+
         start_x = 50
         start_y = 50
-        
+
         points = []
         for i, j in path:
             x = start_x + j * cell_size + cell_size // 2
             y = start_y + i * cell_size + cell_size // 2
             points.append((x, y))
-        
+
         if len(points) > 1:
             pygame.draw.lines(self.screen, color, False, points, width)
-    
+
     def _render_alternative_paths(self):
         """
         渲染多个备选路径方案
         """
         if not self.alternative_paths:
             return
-        
+
         # 定义不同路径的颜色和样式
         path_colors = [
             (Config.COLORS['BLUE'], 3),      # 方案1：蓝色，粗线
@@ -825,28 +832,28 @@ class GameUI:
             (Config.COLORS['PURPLE'], 2),    # 方案4：紫色，中线
             (Config.COLORS['ORANGE'], 2),    # 方案5：橙色，中线
         ]
-        
+
         maze_size = self.game_engine.maze_size
         maze_area_width = min(600, Config.WINDOW_WIDTH - 400)
         maze_area_height = min(600, Config.WINDOW_HEIGHT - 100)
         cell_size = min(maze_area_width // maze_size, maze_area_height // maze_size)
         start_x = 50
         start_y = 50
-        
+
         # 绘制每个路径方案
         for i, alt in enumerate(self.alternative_paths):
             if not alt.get('success') or not alt.get('path'):
                 continue
-            
+
             path = alt['path']
             if i < len(path_colors):
                 color, width = path_colors[i]
             else:
                 color, width = Config.COLORS['GRAY'], 2
-            
+
             # 绘制路径线条
             self._render_path(path, color, width)
-            
+
             # 绘制路径起点和终点标记
             if len(path) >= 2:
                 # 起点标记
@@ -854,15 +861,15 @@ class GameUI:
                 start_x_pos = start_x + start_j * cell_size + cell_size // 2
                 start_y_pos = start_y + start_i * cell_size + cell_size // 2
                 pygame.draw.circle(self.screen, color, (start_x_pos, start_y_pos), cell_size // 4, 2)
-                
+
                 # 终点标记
                 end_i, end_j = path[-1]
                 end_x_pos = start_x + end_j * cell_size + cell_size // 2
                 end_y_pos = start_y + end_i * cell_size + cell_size // 2
-                pygame.draw.rect(self.screen, color, 
-                               (end_x_pos - cell_size//4, end_y_pos - cell_size//4, 
+                pygame.draw.rect(self.screen, color,
+                               (end_x_pos - cell_size//4, end_y_pos - cell_size//4,
                                 cell_size//2, cell_size//2), 2)
-            
+
             # 绘制资源收集点
             resources_collected = alt.get('resources_collected', [])
             for resource in resources_collected:
@@ -872,10 +879,10 @@ class GameUI:
                     res_y = start_y + res_i * cell_size + cell_size // 2
                     # 绘制资源收集标记（小圆圈）
                     pygame.draw.circle(self.screen, color, (res_x, res_y), cell_size // 6, 2)
-        
+
         # 绘制路径图例
         self._render_path_legend()
-    
+
     def _render_path_legend(self):
         """
         绘制路径图例
@@ -884,28 +891,28 @@ class GameUI:
         legend_y = 400
         legend_width = 320
         legend_height = min(150, 30 + len(self.alternative_paths) * 25)
-        
+
         # 绘制阴影
         shadow_offset = 3
-        pygame.draw.rect(self.screen, Config.COLORS['SHADOW'], 
+        pygame.draw.rect(self.screen, Config.COLORS['SHADOW'],
                         (legend_x + shadow_offset, legend_y + shadow_offset, legend_width, legend_height))
-        
+
         # 绘制图例背景
-        pygame.draw.rect(self.screen, Config.COLORS['PANEL_BG'], 
+        pygame.draw.rect(self.screen, Config.COLORS['PANEL_BG'],
                         (legend_x, legend_y, legend_width, legend_height))
-        pygame.draw.rect(self.screen, Config.COLORS['INFO'], 
+        pygame.draw.rect(self.screen, Config.COLORS['INFO'],
                         (legend_x, legend_y, legend_width, legend_height), 2)
-        
+
         # 绘制标题栏
         title_height = 25
-        pygame.draw.rect(self.screen, Config.COLORS['INFO'], 
+        pygame.draw.rect(self.screen, Config.COLORS['INFO'],
                         (legend_x, legend_y, legend_width, title_height))
-        
+
         # 绘制标题
         title = self._render_mixed_text("🗺️ 路径方案图例", 'normal', Config.COLORS['WHITE'])
         title_rect = title.get_rect(center=(legend_x + legend_width // 2, legend_y + title_height // 2))
         self.screen.blit(title, title_rect)
-        
+
         # 绘制每个路径的图例
         path_colors = [
             (Config.COLORS['BLUE'], "🔵", "蓝色路径"),
@@ -914,25 +921,25 @@ class GameUI:
             (Config.COLORS['PURPLE'], "🟣", "紫色路径"),
             (Config.COLORS['ORANGE'], "🟠", "橙色路径"),
         ]
-        
+
         for i, alt in enumerate(self.alternative_paths[:5]):  # 最多显示5个
             if not alt.get('success'):
                 continue
-            
+
             y_offset = legend_y + title_height + 5 + i * 22
-            
+
             # 绘制颜色指示器
             if i < len(path_colors):
                 color, icon, color_name = path_colors[i]
                 # 绘制图标
                 icon_surface = self._render_mixed_text(icon, 'small', color)
                 self.screen.blit(icon_surface, (legend_x + 8, y_offset))
-                
+
                 # 绘制线条
-                pygame.draw.line(self.screen, color, 
-                               (legend_x + 25, y_offset + 8), 
+                pygame.draw.line(self.screen, color,
+                               (legend_x + 25, y_offset + 8),
                                (legend_x + 45, y_offset + 8), 3)
-            
+
             # 绘制路径信息
             name = alt.get('name', f'方案{i+1}')
             steps = len(alt.get('path', []))
@@ -940,116 +947,116 @@ class GameUI:
             text = f"{name} (步数:{steps}, 资源:{resources})"
             text_surface = self._render_mixed_text(text, 'small', Config.COLORS['TEXT_PRIMARY'])
             self.screen.blit(text_surface, (legend_x + 55, y_offset))
-    
+
     def _render_player(self):
         """
         渲染玩家
         """
         if not self.game_engine.player_pos:
             return
-        
+
         i, j = self.game_engine.player_pos
         maze_size = self.game_engine.maze_size
-        
+
         maze_area_width = min(600, Config.WINDOW_WIDTH - 400)
         maze_area_height = min(600, Config.WINDOW_HEIGHT - 100)
         cell_size = min(maze_area_width // maze_size, maze_area_height // maze_size)
-        
+
         start_x = 50
         start_y = 50
-        
+
         x = start_x + j * cell_size + cell_size // 2
         y = start_y + i * cell_size + cell_size // 2
-        
+
         # 绘制玩家阴影
         shadow_radius = cell_size // 3
         pygame.draw.circle(self.screen, Config.COLORS['SHADOW'], (x + 2, y + 2), shadow_radius)
-        
+
         # 绘制玩家主体（渐变效果）
         player_radius = cell_size // 3
         pygame.draw.circle(self.screen, Config.COLORS['ACCENT'], (x, y), player_radius)
         pygame.draw.circle(self.screen, Config.COLORS['ORANGE'], (x, y), player_radius - 2)
-        
+
         # 绘制玩家边框
         pygame.draw.circle(self.screen, Config.COLORS['WHITE'], (x, y), player_radius, 2)
-        
+
         # 绘制玩家图标
         player_symbol = "🚶"
         symbol_surface = self._render_mixed_text(player_symbol, 'small', Config.COLORS['WHITE'])
         symbol_rect = symbol_surface.get_rect(center=(x, y))
         self.screen.blit(symbol_surface, symbol_rect)
-    
+
     def _render_ui_panels(self):
         """
         渲染UI面板
         """
         panel_x = Config.WINDOW_WIDTH - 350
         panel_y = 50
-        
+
         # 游戏状态面板
         if self.show_statistics:
             panel_y = self._render_statistics_panel(panel_x, panel_y)
-        
+
         # 控制帮助面板
         if self.show_controls:
             panel_y = self._render_controls_panel(panel_x, panel_y)
-        
+
         # 算法信息面板
         if self.show_algorithm_info:
             panel_y = self._render_algorithm_panel(panel_x, panel_y)
-        
 
-        
+
+
         # 交互提示面板
         if self.game_engine.pending_interaction:
             panel_y = self._render_interaction_panel(panel_x, panel_y)
-        
+
         # 消息面板
         self._render_messages_panel(panel_x, Config.WINDOW_HEIGHT - 200)
-    
+
     def _render_statistics_panel(self, x: int, y: int) -> int:
         """
         渲染统计信息面板
-        
+
         Args:
             x, y: 面板位置
-        
+
         Returns:
             int: 下一个面板的y坐标
         """
         game_state = self.game_engine.get_game_state()
-        
+
         # 面板背景 - 现代化设计
         panel_height = 230
         panel_width = 320
-        
+
         # 绘制阴影效果
         shadow_offset = 4
-        pygame.draw.rect(self.screen, (0, 0, 0, 50), 
+        pygame.draw.rect(self.screen, (0, 0, 0, 50),
                         (x + shadow_offset, y + shadow_offset, panel_width, panel_height))
-        
+
         # 绘制主面板背景
         pygame.draw.rect(self.screen, Config.COLORS['PANEL_BG'], (x, y, panel_width, panel_height))
-        
+
         # 绘制渐变边框
         pygame.draw.rect(self.screen, Config.COLORS['PRIMARY'], (x, y, panel_width, panel_height), 2)
         pygame.draw.rect(self.screen, Config.COLORS['PANEL_BORDER'], (x + 1, y + 1, panel_width - 2, panel_height - 2), 1)
-        
+
         # 标题栏背景
         title_height = 35
         pygame.draw.rect(self.screen, Config.COLORS['PRIMARY'], (x, y, panel_width, title_height))
-        
+
         # 标题
         title = self._render_mixed_text("📊 游戏统计", 'normal', Config.COLORS['WHITE'])
         title_rect = title.get_rect(center=(x + panel_width // 2, y + title_height // 2))
         self.screen.blit(title, title_rect)
-        
+
         # 获取自动拾取状态
         auto_pickup_status = self.game_engine.get_auto_pickup_status()
-        
+
         # 获取可视化导航状态
         visual_nav_status = self.game_engine.get_visual_navigation_status()
-        
+
         # 统计信息 - 使用图标和颜色编码
         stats_data = [
             ("📍", "位置", f"{game_state['player_pos']}", Config.COLORS['INFO']),
@@ -1058,17 +1065,17 @@ class GameUI:
             ("📦", "物品", f"{game_state['collected_items']}", Config.COLORS['SUCCESS']),
             ("🧩", "解谜", f"{game_state['solved_puzzles']}", Config.COLORS['PURPLE']),
             ("👹", "BOSS", f"{game_state['defeated_bosses']}", Config.COLORS['DANGER']),
-            ("🤖", "自动拾取", '开启' if auto_pickup_status['enabled'] else '关闭', 
+            ("🤖", "自动拾取", '开启' if auto_pickup_status['enabled'] else '关闭',
              Config.COLORS['SUCCESS'] if auto_pickup_status['enabled'] else Config.COLORS['TEXT_DISABLED'])
         ]
-        
+
         # 如果有可视化导航，添加导航状态
         if visual_nav_status['active']:
             nav_progress = f"{visual_nav_status['current_step']}/{visual_nav_status['total_steps']}"
             stats_data.append(
                 ("🚀", "可视化导航", nav_progress, Config.COLORS['PURPLE'])
             )
-        
+
         # 如果有AI导航，添加AI导航状态
         ai_nav_status = self.game_engine.get_ai_navigation_status()
         if ai_nav_status['active']:
@@ -1076,63 +1083,63 @@ class GameUI:
             stats_data.append(
                 ("🤖", "AI最佳路径", ai_nav_progress, Config.COLORS['GOLD'])
             )
-        
+
         # 绘制统计信息
         start_y = y + title_height + 10
         for i, (icon, label, value, color) in enumerate(stats_data):
             item_y = start_y + i * 22
-            
+
             # 绘制图标
             icon_surface = self._render_mixed_text(icon, 'small', color)
             self.screen.blit(icon_surface, (x + 15, item_y))
-            
+
             # 绘制标签
             label_surface = self._render_mixed_text(f"{label}:", 'small', Config.COLORS['TEXT_SECONDARY'])
             self.screen.blit(label_surface, (x + 40, item_y))
-            
+
             # 绘制数值
             value_surface = self._render_mixed_text(value, 'small', color)
             value_rect = value_surface.get_rect()
             self.screen.blit(value_surface, (x + panel_width - value_rect.width - 15, item_y))
-        
+
         return y + panel_height + 15
-    
+
     def _render_interaction_panel(self, x: int, y: int) -> int:
         """
         渲染交互提示面板
-        
+
         Args:
             x, y: 面板位置
-        
+
         Returns:
             int: 下一个面板的y坐标
         """
         # 面板背景 - 现代化设计
         panel_height = 90
         panel_width = 320
-        
+
         # 绘制阴影效果
         shadow_offset = 4
-        pygame.draw.rect(self.screen, (0, 0, 0, 50), 
+        pygame.draw.rect(self.screen, (0, 0, 0, 50),
                         (x + shadow_offset, y + shadow_offset, panel_width, panel_height))
-        
+
         # 绘制主面板背景 - 使用警告色
         pygame.draw.rect(self.screen, Config.COLORS['PANEL_BG'], (x, y, panel_width, panel_height))
-        
+
         # 绘制动态边框 - 闪烁效果
         border_color = Config.COLORS['WARNING']
         pygame.draw.rect(self.screen, border_color, (x, y, panel_width, panel_height), 3)
         pygame.draw.rect(self.screen, Config.COLORS['ACCENT'], (x + 2, y + 2, panel_width - 4, panel_height - 4), 1)
-        
+
         # 标题栏背景
         title_height = 30
         pygame.draw.rect(self.screen, Config.COLORS['WARNING'], (x, y, panel_width, title_height))
-        
+
         # 标题
         title = self._render_mixed_text("⚡ 可交互内容", 'normal', Config.COLORS['BLACK'])
         title_rect = title.get_rect(center=(x + panel_width // 2, y + title_height // 2))
         self.screen.blit(title, title_rect)
-        
+
         # 交互提示
         interaction = self.game_engine.pending_interaction
         if interaction['type'] == 'puzzle':
@@ -1147,61 +1154,61 @@ class GameUI:
             icon = "❓"
             hint_text = "未知内容 - 按Enter键交互"
             hint_color = Config.COLORS['INFO']
-        
+
         # 绘制交互内容
         content_y = y + title_height + 15
-        
+
         # 绘制图标
         icon_surface = self._render_mixed_text(icon, 'normal', hint_color)
         self.screen.blit(icon_surface, (x + 15, content_y))
-        
+
         # 绘制提示文字
         hint_surface = self._render_mixed_text(hint_text, 'small', Config.COLORS['TEXT_PRIMARY'])
         self.screen.blit(hint_surface, (x + 50, content_y + 5))
-        
+
         # 绘制按键提示
         key_hint = "[Enter] 交互"
         key_surface = self._render_mixed_text(key_hint, 'small', Config.COLORS['HIGHLIGHT'])
         key_rect = key_surface.get_rect()
         self.screen.blit(key_surface, (x + panel_width - key_rect.width - 15, content_y + 5))
-        
+
         return y + panel_height + 15
-    
+
     def _render_controls_panel(self, x: int, y: int) -> int:
         """
         渲染控制帮助面板
-        
+
         Args:
             x, y: 面板位置
-        
+
         Returns:
             int: 下一个面板的y坐标
         """
         # 面板背景 - 现代化设计
         panel_height = 260
         panel_width = 320
-        
+
         # 绘制阴影效果
         shadow_offset = 4
-        pygame.draw.rect(self.screen, (0, 0, 0, 50), 
+        pygame.draw.rect(self.screen, (0, 0, 0, 50),
                         (x + shadow_offset, y + shadow_offset, panel_width, panel_height))
-        
+
         # 绘制主面板背景
         pygame.draw.rect(self.screen, Config.COLORS['PANEL_BG'], (x, y, panel_width, panel_height))
-        
+
         # 绘制边框
         pygame.draw.rect(self.screen, Config.COLORS['INFO'], (x, y, panel_width, panel_height), 2)
         pygame.draw.rect(self.screen, Config.COLORS['PANEL_BORDER'], (x + 1, y + 1, panel_width - 2, panel_height - 2), 1)
-        
+
         # 标题栏背景
         title_height = 35
         pygame.draw.rect(self.screen, Config.COLORS['INFO'], (x, y, panel_width, title_height))
-        
+
         # 标题
         title = self._render_mixed_text("🎮 控制帮助", 'normal', Config.COLORS['WHITE'])
         title_rect = title.get_rect(center=(x + panel_width // 2, y + title_height // 2))
         self.screen.blit(title, title_rect)
-        
+
         # 控制说明 - 分类显示
         controls_data = [
             ("🎯", "移动", "方向键", Config.COLORS['CYAN']),
@@ -1219,62 +1226,62 @@ class GameUI:
             ("❓", "帮助开关", "H", Config.COLORS['TEAL']),
             ("🚪", "退出游戏", "ESC", Config.COLORS['TEXT_DISABLED'])
         ]
-        
+
         # 绘制控制说明
         start_y = y + title_height + 8
         for i, (icon, action, key, color) in enumerate(controls_data):
             item_y = start_y + i * 16
-            
+
             # 绘制图标
             icon_surface = self._render_mixed_text(icon, 'small', color)
             self.screen.blit(icon_surface, (x + 10, item_y))
-            
+
             # 绘制动作
             action_surface = self._render_mixed_text(action, 'small', Config.COLORS['TEXT_SECONDARY'])
             self.screen.blit(action_surface, (x + 35, item_y))
-            
+
             # 绘制按键 - 右对齐
             key_surface = self._render_mixed_text(key, 'small', color)
             key_rect = key_surface.get_rect()
             self.screen.blit(key_surface, (x + panel_width - key_rect.width - 15, item_y))
-        
+
         return y + panel_height + 15
-    
+
     def _render_algorithm_panel(self, x: int, y: int) -> int:
         """
         渲染算法信息面板
-        
+
         Args:
             x, y: 面板位置
-        
+
         Returns:
             int: 下一个面板的y坐标
         """
         # 面板背景 - 现代化设计
         panel_height = 180
         panel_width = 320
-        
+
         # 绘制阴影效果
         shadow_offset = 4
-        pygame.draw.rect(self.screen, (0, 0, 0, 50), 
+        pygame.draw.rect(self.screen, (0, 0, 0, 50),
                         (x + shadow_offset, y + shadow_offset, panel_width, panel_height))
-        
+
         # 绘制主面板背景
         pygame.draw.rect(self.screen, Config.COLORS['PANEL_BG'], (x, y, panel_width, panel_height))
-        
+
         # 绘制边框
         pygame.draw.rect(self.screen, Config.COLORS['PURPLE'], (x, y, panel_width, panel_height), 2)
         pygame.draw.rect(self.screen, Config.COLORS['PANEL_BORDER'], (x + 1, y + 1, panel_width - 2, panel_height - 2), 1)
-        
+
         # 标题栏背景
         title_height = 35
         pygame.draw.rect(self.screen, Config.COLORS['PURPLE'], (x, y, panel_width, title_height))
-        
+
         # 标题
         title = self._render_mixed_text("🧠 算法信息", 'normal', Config.COLORS['WHITE'])
         title_rect = title.get_rect(center=(x + panel_width // 2, y + title_height // 2))
         self.screen.blit(title, title_rect)
-        
+
         # 算法说明 - 分类显示
         algorithm_data = [
             ("🔧", "分治法", "迷宫生成", Config.COLORS['CYAN']),
@@ -1283,88 +1290,88 @@ class GameUI:
             ("🔄", "回溯法", "解谜破解", Config.COLORS['ORANGE']),
             ("⚔️", "分支限界", "BOSS战斗", Config.COLORS['DANGER']),
         ]
-        
+
         # 绘制算法说明
         start_y = y + title_height + 10
         for i, (icon, algorithm, usage, color) in enumerate(algorithm_data):
             item_y = start_y + i * 18
-            
+
             # 绘制图标
             icon_surface = self._render_mixed_text(icon, 'small', color)
             self.screen.blit(icon_surface, (x + 10, item_y))
-            
+
             # 绘制算法名称
             algo_surface = self._render_mixed_text(algorithm, 'small', color)
             self.screen.blit(algo_surface, (x + 35, item_y))
-            
+
             # 绘制用途
             usage_surface = self._render_mixed_text(usage, 'small', Config.COLORS['TEXT_SECONDARY'])
             usage_rect = usage_surface.get_rect()
             self.screen.blit(usage_surface, (x + panel_width - usage_rect.width - 15, item_y))
-        
+
         # 分隔线
         separator_y = start_y + len(algorithm_data) * 18 + 5
-        pygame.draw.line(self.screen, Config.COLORS['PANEL_BORDER'], 
+        pygame.draw.line(self.screen, Config.COLORS['PANEL_BORDER'],
                         (x + 10, separator_y), (x + panel_width - 10, separator_y), 1)
-        
+
         # 路径颜色说明
         path_info = [
             ("🔵", "蓝线: 动态规划路径", Config.COLORS['BLUE']),
             ("🟢", "绿线: 贪心策略路径", Config.COLORS['SUCCESS'])
         ]
-        
+
         for i, (icon, desc, color) in enumerate(path_info):
             item_y = separator_y + 10 + i * 16
-            
+
             # 绘制颜色图标
             icon_surface = self._render_mixed_text(icon, 'small', color)
             self.screen.blit(icon_surface, (x + 10, item_y))
-            
+
             # 绘制说明
             desc_surface = self._render_mixed_text(desc, 'small', Config.COLORS['TEXT_SECONDARY'])
             self.screen.blit(desc_surface, (x + 35, item_y))
-        
+
         return y + panel_height + 15
-    
+
     def _render_messages_panel(self, x: int, y: int):
         """
         渲染消息面板
-        
+
         Args:
             x, y: 面板位置
         """
         # 面板背景 - 现代化设计
         panel_height = 140
         panel_width = 320
-        
+
         # 绘制阴影效果
         shadow_offset = 4
-        pygame.draw.rect(self.screen, (0, 0, 0, 50), 
+        pygame.draw.rect(self.screen, (0, 0, 0, 50),
                         (x + shadow_offset, y + shadow_offset, panel_width, panel_height))
-        
+
         # 绘制主面板背景
         pygame.draw.rect(self.screen, Config.COLORS['PANEL_BG'], (x, y, panel_width, panel_height))
-        
+
         # 绘制边框
         pygame.draw.rect(self.screen, Config.COLORS['SUCCESS'], (x, y, panel_width, panel_height), 2)
         pygame.draw.rect(self.screen, Config.COLORS['PANEL_BORDER'], (x + 1, y + 1, panel_width - 2, panel_height - 2), 1)
-        
+
         # 标题栏背景
         title_height = 35
         pygame.draw.rect(self.screen, Config.COLORS['SUCCESS'], (x, y, panel_width, title_height))
-        
+
         # 标题
         title = self._render_mixed_text("💬 消息", 'normal', Config.COLORS['WHITE'])
         title_rect = title.get_rect(center=(x + panel_width // 2, y + title_height // 2))
         self.screen.blit(title, title_rect)
-        
+
         # 显示最近的消息
         start_y = y + title_height + 8
         recent_messages = self.messages[-self.max_messages:]
-        
+
         for i, message in enumerate(recent_messages):
             item_y = start_y + i * 16
-            
+
             # 根据消息内容选择颜色
             if "成功" in message or "完成" in message or "恭喜" in message:
                 msg_color = Config.COLORS['SUCCESS']
@@ -1374,10 +1381,10 @@ class GameUI:
                 msg_color = Config.COLORS['WARNING']
             else:
                 msg_color = Config.COLORS['TEXT_PRIMARY']
-            
+
             # 绘制消息前缀点
             pygame.draw.circle(self.screen, msg_color, (x + 15, item_y + 6), 2)
-            
+
             # 绘制消息文本
             text_surface = self._render_mixed_text(message, 'small', msg_color)
             # 限制文本长度以适应面板宽度
@@ -1385,20 +1392,20 @@ class GameUI:
                 # 截断过长的消息
                 truncated_msg = message[:40] + "..."
                 text_surface = self._render_mixed_text(truncated_msg, 'small', msg_color)
-            
+
             self.screen.blit(text_surface, (x + 25, item_y))
-    
+
     def _draw_settings_screen(self):
         """
         绘制设置界面
         """
         # 创建渐变背景
         self.screen.fill(Config.COLORS['BLACK'])
-        
+
         # 绘制背景装饰
         center_x = Config.WINDOW_WIDTH // 2
         center_y = Config.WINDOW_HEIGHT // 2
-        
+
         # 绘制背景圆圈装饰
         for i in range(5):
             radius = 100 + i * 50
@@ -1407,7 +1414,7 @@ class GameUI:
             # 由于pygame不直接支持alpha，我们使用较暗的颜色模拟
             dark_color = tuple(c // (i + 2) for c in Config.COLORS['PRIMARY'])
             pygame.draw.circle(self.screen, dark_color, (center_x, center_y), radius, 2)
-        
+
         # 主标题
         try:
             title_font = pygame.font.Font('font/msyh.ttc', 16)
@@ -1853,12 +1860,8 @@ class GameUI:
             for i, alt in enumerate(alternatives, 1):
                 if alt.get('success'):
                     name = alt.get('name', f'方案{i}')
-                    value = alt.get('total_value', 0)
-                    steps = alt.get('total_steps', len(alt.get('path', [])))
-                    resources = len(alt.get('resources_collected', []))
                     
                     self.add_message(f"{i}. {name}")
-                    self.add_message(f"   步数:{steps} 资源:{resources}")
         else:
             self.add_message("无可用路径方案")
         

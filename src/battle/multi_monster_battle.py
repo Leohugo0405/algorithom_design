@@ -5,8 +5,7 @@
 支持同时与多个怪物战斗，玩家可以选择攻击目标
 """
 
-import random
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 from dataclasses import dataclass
 from ..config import Config
 

@@ -8,14 +8,7 @@
 import heapq
 from typing import List, Tuple, Dict, Optional
 from dataclasses import dataclass
-try:
-    from ..config import Config
-except ImportError:
-    # 当作为独立模块导入时，使用绝对导入
-    import sys
-    import os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-    from config import Config
+from ..config import Config
 
 @dataclass
 class BattleState:

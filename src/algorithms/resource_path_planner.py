@@ -947,11 +947,11 @@ class ResourcePathPlanner:
         trap_result = self.find_maximum_value_path_with_traps()
         if trap_result['success']:
             alternatives.append({
-                'name': '🧠 智能陷阱权衡路径',
+                'name': '🧠 最优路径',
                 'description': '权衡陷阱代价与金币收益的最优策略',
                 **trap_result
             })
-            print(f"陷阱权衡最优路径: 净价值={trap_result.get('net_value', 0)}, 总价值={trap_result.get('total_value', 0)}")
+            # 已删除控制台输出：陷阱权衡最优路径信息
 
         # 方案2：直接路径
         direct_path = self._a_star_path(self.start_pos, self.exit_pos)

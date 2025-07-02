@@ -6,22 +6,10 @@
 """
 
 import pygame
-import math
 from typing import Dict, List, Tuple, Optional
-try:
-    from ..config import Config
-    from ..battle.multi_monster_battle import MultiMonsterBattle
-    from ..algorithms.boss_strategy import BossStrategy
-    from ..algorithms.multi_target_boss_strategy import MultiTargetBossStrategy
-except ImportError:
-    # 当作为独立模块运行时的导入方式
-    import sys
-    import os
-    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-    from config import Config
-    from battle.multi_monster_battle import MultiMonsterBattle
-    from algorithms.boss_strategy import BossStrategy
-    from algorithms.multi_target_boss_strategy import MultiTargetBossStrategy
+from ..config import Config
+from ..battle.multi_monster_battle import MultiMonsterBattle
+
 
 class MultiMonsterBattleUI:
     """
@@ -104,7 +92,7 @@ class MultiMonsterBattleUI:
         self.player_scroll_offset = 0
         self.player_max_scroll_offset = 0
         
-        # 策略结果滚动状态（保持原有功能）
+        # 策略结果滚动状态
         self.scroll_offset = 0
         self.max_scroll_offset = 0
         
@@ -248,7 +236,7 @@ class MultiMonsterBattleUI:
         pygame.display.set_caption(f"多怪物战斗 - {self.scenario['name']}")
         self.clock = pygame.time.Clock()
         
-        # 初始化字体 - 分别为文字和emoji使用不同字体
+        # 初始化字体
         try:
             # 文字字体
             self.font = pygame.font.Font('font/msyh.ttc', 20)
@@ -256,9 +244,9 @@ class MultiMonsterBattleUI:
             self.title_font = pygame.font.Font('font/msyh.ttc', 24)
             
             # emoji字体
-            self.emoji_font = pygame.font.Font('font/seguiemj.ttf', 20)
-            self.emoji_small_font = pygame.font.Font('font/seguiemj.ttf', 14)
-            self.emoji_title_font = pygame.font.Font('font/seguiemj.ttf', 24)
+            self.emoji_font = pygame.font.Font('font/NotoColorEmoji.ttf', 20)
+            self.emoji_small_font = pygame.font.Font('font/NotoColorEmoji.ttf', 14)
+            self.emoji_title_font = pygame.font.Font('font/NotoColorEmoji.ttf', 24)
         except Exception as e:
             print(f"字体加载失败: {e}")
             # 备用字体
@@ -845,7 +833,7 @@ class MultiMonsterBattleUI:
         # 恢复裁剪区域
         self.screen.set_clip(old_clip)
         
-        # 绘制滚动条（如果需要）
+        # 绘制滚动条
         if self.skill_max_scroll_offset > 0:
             scrollbar_x = self.skill_area.x + self.skill_area.width - 12
             scrollbar_y = self.skill_area.y + 25
@@ -1293,37 +1281,7 @@ class MultiMonsterBattleUI:
             content_surface.blit(no_solution_text, (10, y_offset))
             y_offset += 40
         
-        # 统计信息
-        if self.strategy_stats:
-            y_offset += 20
-            stats_title = self._render_mixed_text("算法统计信息:", 'normal', Config.COLORS['YELLOW'])
-            content_surface.blit(stats_title, (10, y_offset))
-            y_offset += 30
-            
-            stats_info = [
-                f"探索节点数: {self.strategy_stats.get('explored_states', self.strategy_stats.get('nodes_explored', 0))}",
-                f"剪枝节点数: {self.strategy_stats.get('pruned_states', self.strategy_stats.get('nodes_pruned', 0))}",
-                f"最大深度: {self.strategy_stats.get('max_depth', 0)}",
-                f"计算时间: {self.strategy_stats.get('computation_time', 0.0):.3f}秒",
-                f"最优回合数: {self.strategy_stats['optimal_rounds']}",
-                f"策略成功: {'是' if self.strategy_stats.get('success', False) else '否'}",
-                f"算法类型: {self.strategy_stats.get('algorithm', 'Unknown')}"
-            ]
-            
-            # 添加击败顺序信息
-            if self.strategy_stats.get('defeated_order'):
-                defeated_order = self.strategy_stats['defeated_order']
-                order_text = f"击败顺序: {[f'目标{id+1}' for id in defeated_order]}"
-                stats_info.append(order_text)
-                
-                order_score = self.strategy_stats.get('order_score', 0)
-                score_text = f"顺序评分: {order_score:.1f}"
-                stats_info.append(score_text)
-            
-            for stat in stats_info:
-                stat_surface = self._render_mixed_text(stat, 'small', Config.COLORS['WHITE'])
-                content_surface.blit(stat_surface, (30, y_offset))
-                y_offset += 25
+        # 删除了算法统计信息的显示部分
         
         # 计算最大滚动偏移量
         content_height = y_offset + 50  # 添加一些底部边距

@@ -7,7 +7,7 @@
 
 import random
 import json
-from typing import List, Tuple, Dict
+from typing import List, Dict
 from ..config import Config
 
 class MazeGenerator:
