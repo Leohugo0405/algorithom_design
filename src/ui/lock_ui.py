@@ -237,9 +237,9 @@ class LockUI:
         if self.remembered_json_file:
             self._load_json_file_auto(self.remembered_json_file)
         
-        # 如果设置了自动解谜，则在主循环开始前自动解谜
-        if self.auto_solve:
-            self._auto_solve()
+        # # 如果设置了自动解谜，则在主循环开始前自动解谜
+        # if self.auto_solve:
+        #     self._auto_solve()
         
         while self.running:
             # 处理事件
